@@ -1,4 +1,4 @@
-from telegram.ext import filters
+from telegram.ext import filters, ConversationHandler
 from telegram import ForceReply, Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 from telegram import Chat, ChatMember, ChatMemberUpdated, Update
@@ -11,6 +11,7 @@ from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
     ChatMemberHandler,
+    PicklePersistence,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -33,6 +34,27 @@ POINT_NAME          = "point.pickle"
 score_dict          = dict()
 point_dict          = dict()
 
+CHOOSING, TYPING_REPLY, TYPING_CHOICE = range(3)
+
+reply_keyboard = [
+    ["점메추", "오늘의 운세"],
+    ["Done"],
+]
+markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
+
+async def done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Display the gathered info and end the conversation."""
+    user = update.effective_user.first_name
+
+    await update.message.reply_text(f"{user} 오늘 하루도 고생해라! \U0001f607", reply_markup=ReplyKeyboardRemove(),
+    )
+    return ConversationHandler.END
+
+def facts_to_str(user_data: Dict[str, str]) -> str:
+    """Helper function for formatting the gathered user info."""
+    facts = [f"{key} - {value}" for key, value in user_data.items()]
+    return "\n".join(facts).join(["\n", "\n"])
+
 def set_last_day():
     """ -------------------------------------------------------------------------------------------------------------
     Get the code of last day
@@ -51,11 +73,12 @@ def set_last_day():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
-    user = update.effective_user
+    user = update.effective_user.first_name
+    reply_text = "후.. ㅈ같네"
     await update.message.reply_html(
-        rf"Hi {user.mention_html()}!",
-        reply_markup=ForceReply(selective=True),
+        reply_text, reply_markup=markup,
     )
+    return CHOOSING
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /help is issued."""
@@ -69,20 +92,20 @@ async def dice_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user.first_name
     rand_num = random.randrange(0,6)
     if rand_num == 1:
-        await update.message.reply_text(f'{user}님의 행운은 최악입니다.')
+        await update.message.reply_text(f'{user}님의 행운은 최악입니다.',reply_markup=markup,)
     elif rand_num == 2:
-        await update.message.reply_text(f'{user}님의 행운은 좋지 않습니다.')
+        await update.message.reply_text(f'{user}님의 행운은 좋지 않습니다.',reply_markup=markup,)
     elif rand_num == 3:
-        await update.message.reply_text(f'{user}님의 행운은 보통입니다.')
+        await update.message.reply_text(f'{user}님의 행운은 보통입니다.',reply_markup=markup,)
     elif rand_num == 4:
-        await update.message.reply_text(f'{user}님의 행운은 좋은편입니다.')
+        await update.message.reply_text(f'{user}님의 행운은 좋은편입니다.',reply_markup=markup,)
     elif rand_num == 5:
-        await update.message.reply_text(f'{user}님의 행운은 아주 좋은편입니다.')
+        await update.message.reply_text(f'{user}님의 행운은 아주 좋은편입니다.',reply_markup=markup,)
     elif rand_num == 6:
-        await update.message.reply_text(f'{user}님의 행운은 최상입니다.')
+        await update.message.reply_text(f'{user}님의 행운은 최상입니다.',reply_markup=markup,)
     else:
-        await update.message.reply_text(f'{user}님의 행운은 없습니다. \n 오늘 하루는 지옥입니다.')
-
+        await update.message.reply_text(f'{user}님의 행운은 없습니다. \n 오늘 하루는 지옥입니다.',reply_markup=markup,)
+    return CHOOSING
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Echo the user message."""
@@ -170,7 +193,9 @@ async def jum_me_chu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     점심 메뉴 추천
     ------------------------------------------------------------------------------------------------------------- """
     user = update.effective_user.first_name
-    await update.message.reply_text(f"점심은 킹까스")
+    await update.message.reply_text(f"{user}! 너의 점심은 킹까스다!!",reply_markup=markup,)
+
+    return CHOOSING
 
 async def chul_seok(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """ -------------------------------------------------------------------------------------------------------------
@@ -228,7 +253,8 @@ def main() -> None:
     #token = "5796035729:AAEiMHlyofIjoFyct-QEsDKtOh032bmvMvM"
     with open( "TOKEN.txt", 'r' ) as f:
         TOKEN = f.read()
-    application = Application.builder().token(TOKEN).build()
+    persistence = PicklePersistence(filepath="conversationbot")
+    application = Application.builder().token(TOKEN).persistence(persistence).build()
 
     # if exists, load the last pickled dict of leaderboard
     if os.path.isfile( LNAME ):
@@ -241,7 +267,25 @@ def main() -> None:
 
     set_last_day()
     # on different commands - answer in Telegram
-    application.add_handler(CommandHandler("start", start))
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            CHOOSING: [
+                MessageHandler(
+                    filters.Regex(r"점메추"), jum_me_chu
+                ),
+                MessageHandler(
+                    filters.Regex(r"오늘의 운세"), dice_cmd
+                ),
+            ],
+        },
+        fallbacks=[MessageHandler(filters.Regex("^Done$"), done)],
+        name="후후 봇",
+        persistent=True,
+    )
+    application.add_handler(conv_handler)
+
+    #application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("leaderboard", show_leads))
     application.add_handler(CommandHandler("money_king", show_money_leads))
