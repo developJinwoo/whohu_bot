@@ -225,7 +225,6 @@ def main() -> None:
     global score_dict
     global point_dict
     # Create the Application and pass it your bot's token.
-    #token = "5796035729:AAEiMHlyofIjoFyct-QEsDKtOh032bmvMvM"
     with open( "TOKEN.txt", 'r' ) as f:
         TOKEN = f.read()
     application = Application.builder().token(TOKEN).build()
