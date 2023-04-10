@@ -89,6 +89,9 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(update.message.text)
 
 async def show_money_leads(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """ -------------------------------------------------------------------------------------------------------------
+    Show the hu money leaderboard 
+    ------------------------------------------------------------------------------------------------------------- """
     txt         = f"\U0001F4C5 LEADERBOARD OF DAY { last_day }\n\n"
     money_lead_dict   = dict()
 
@@ -152,6 +155,9 @@ async def show_leads( update, context ):
     await update.message.reply_text(f"{txt}")
 
 async def my_point_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """ -------------------------------------------------------------------------------------------------------------
+    현재 내 후 포인트 현황
+    ------------------------------------------------------------------------------------------------------------- """
     user = update.effective_user.first_name
     day_time = datetime.now()
     day = str(day_time).split(' ')[0]
@@ -159,7 +165,17 @@ async def my_point_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     await update.message.reply_text(f"{user}님의 자산현황 \n 오늘 {point_dict[user][day]}후 획득! \n 총 자산 {total}후")
 
+async def jum_me_chu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """ -------------------------------------------------------------------------------------------------------------
+    점심 메뉴 추천
+    ------------------------------------------------------------------------------------------------------------- """
+    user = update.effective_user.first_name
+    await update.message.reply_text(f"점심은 킹까스")
+
 async def chul_seok(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """ -------------------------------------------------------------------------------------------------------------
+    출석 체크
+    ------------------------------------------------------------------------------------------------------------- """
     user = update.effective_user.first_name
     day_time = datetime.now()
     day = str(day_time).split(' ')[0]
@@ -237,6 +253,7 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.Regex(r'(a?후)'), get_hu))
     application.add_handler(MessageHandler(filters.Regex(r'ㅊㅅ'), chul_seok))
     application.add_handler(MessageHandler(filters.Regex(r'출석'), chul_seok))
+    application.add_handler(MessageHandler(filters.Regex(r'ㅈㅁㅊ'), jum_me_chu))
 
     # Run the bot until the user presses Ctrl-C
     application.run_polling()
