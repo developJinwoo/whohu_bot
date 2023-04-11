@@ -34,10 +34,11 @@ POINT_NAME          = "point.pickle"
 score_dict          = dict()
 point_dict          = dict()
 
-CHOOSING, TYPING_REPLY, TYPING_CHOICE = range(3)
+CHOOSING, RPS_GAME, USER_CHOICE = range(3)
 
 reply_keyboard = [
-    ["점메추", "오늘의 운세"],
+    ["\U0001f37d\uFE0F 점메추", "\U0001f3b2 오늘의 운세"],
+    ["\u270C\uFE0F \u270A \U0001f590\uFE0F 가위 바위 보!"],
     ["Done"],
 ]
 markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
@@ -83,12 +84,95 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /help is issued."""
     await update.message.reply_text(
-        "명령어 모음 \n  /leaderboard  :  오늘의 한숨왕 \n /dice  :  오늘의 운세 \n /my_point  : 나의 자산 현황 \n" +
-        "/money_king  :  현재 자산 랭킹 \n" +
-        "'ㅊㅅ' or '출석'  : 출석체크 + 1000후"
+        "명령어 모음 \n /start  : 후후 봇 실행 \n /leaderboard  :  오늘의 한숨왕 \n /dice  :  오늘의 운세 \n /my_point  : 나의 자산(후) 현황 \n" +
+        "/money_king  :  현재 자산(후) 랭킹 \n" +
+        "'ㅊㅅ' or '출석'  : 출석체크 +1000후 \n 후.. 한번에 +100후"
     )
+async def rock_papper_scissor(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user.first_name
+    reply_text = "가위 바위 보 게임입니다. \n"
+    reply_text += f"{user}님 100후를 걸고 게임하시겠습니까? \n"
+    reply_text += "(네/아니요)"
+    await update.message.reply_text(reply_text)
+    return RPS_GAME
 
-async def dice_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+def get_bot_choice() -> str:
+    return random.choice(['가위', '바위', '보'])
+
+def get_emoji(choice: str):
+    if choice == "가위":
+        return "\u270C\uFE0F"
+    elif choice == "바위":
+        return "\u270A"
+    elif choice == "보":
+        return "\U0001f590\uFE0F"
+
+async def load_RPS_game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user.first_name
+    game_fee = 100
+    if point_dict[user]["total"] < game_fee:
+        await update.message.reply_text("후가 부족합니다. 후..", reply_markup=markup,)
+    else:
+        user_account = point_dict[user]["total"]
+        user_account -= game_fee
+        
+        reply_text = f"게임비용으로 {game_fee}후를 차감하였습니다.\n"
+        reply_text += f"남아있는 잔액은 {user_account}후 입니다. \n"
+        reply_text += "당신의 선택은? \n "
+        reply_text += "(가위/바위/보)"
+        await update.message.reply_text(reply_text)
+        return USER_CHOICE
+    
+async def get_RPS_winner(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user.first_name
+    user_choice = update.message.text
+    bot_choice = get_bot_choice()
+    user_emoji = get_emoji(user_choice)
+    bot_emoji = get_emoji(bot_choice)
+    
+    rules: dict[str, str] = {'바위': '가위',
+                             '가위': '보',
+                             '보': '바위'}
+    
+    game_fee = 100
+    user_account = point_dict[user]["total"]
+    if user_choice == "가위" or user_choice == "바위" or user_choice == "보":
+        if user_choice == bot_choice:
+            reply_text = "비겼습니다. 후.. \n"
+            reply_text += f"후후 봇 : {bot_emoji} / {user_emoji} : {user}님 \n"
+            reply_text += f"게임비용 {game_fee}후를 돌려드립니다.\n"
+            reply_text += f"남아있는 잔액은 {user_account}후 입니다. \n"
+            with open( POINT_NAME, 'wb' ) as pf:
+                pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
+            await update.message.reply_text(reply_text,reply_markup=markup,)
+            return CHOOSING
+        elif rules[user_choice] == bot_choice:
+            win_prize = game_fee*2
+            point_dict[user][last_day] += game_fee
+            point_dict[user]["total"] += game_fee
+            user_account += game_fee
+            reply_text = f"축하합니다. {user}님이 이겼습니다. 후!! \n"
+            reply_text += f"후후 봇 : {bot_emoji} / {user_emoji} : {user}님 \n"
+            reply_text += f"승리 상금 {win_prize}후를 적립해 드립니다.\n"
+            reply_text += f"남아있는 잔액은 {user_account}후 입니다. \n"
+            with open( POINT_NAME, 'wb' ) as pf:
+                pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
+            await update.message.reply_text(reply_text,reply_markup=markup,)
+            return CHOOSING
+        else:
+            point_dict[user][last_day] -= game_fee 
+            point_dict[user]["total"] -= game_fee
+            user_account -= game_fee
+            reply_text = "후.. 졌습니다. 후.. \n"
+            reply_text += f"후후 봇 : {bot_emoji} / {user_emoji} : {user}님 \n"
+            reply_text += f"남아있는 잔액은 {user_account}후 입니다. \n"
+            with open( POINT_NAME, 'wb' ) as pf:
+                pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
+            await update.message.reply_text(reply_text,reply_markup=markup,)
+            return CHOOSING
+
+    
+async def dice_cmd_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user.first_name
     rand_num = random.randrange(0,6)
     if rand_num == 1:
@@ -106,6 +190,24 @@ async def dice_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         await update.message.reply_text(f'{user}님의 행운은 없습니다. \n 오늘 하루는 지옥입니다.',reply_markup=markup,)
     return CHOOSING
+
+async def dice_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user.first_name
+    rand_num = random.randrange(0,6)
+    if rand_num == 1:
+        await update.message.reply_text(f'{user}님의 행운은 최악입니다.')
+    elif rand_num == 2:
+        await update.message.reply_text(f'{user}님의 행운은 좋지 않습니다.')
+    elif rand_num == 3:
+        await update.message.reply_text(f'{user}님의 행운은 보통입니다.')
+    elif rand_num == 4:
+        await update.message.reply_text(f'{user}님의 행운은 좋은편입니다.')
+    elif rand_num == 5:
+        await update.message.reply_text(f'{user}님의 행운은 아주 좋은편입니다.')
+    elif rand_num == 6:
+        await update.message.reply_text(f'{user}님의 행운은 최상입니다.')
+    else:
+        await update.message.reply_text(f'{user}님의 행운은 없습니다. \n 오늘 하루는 지옥입니다.')
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Echo the user message."""
@@ -182,39 +284,40 @@ async def my_point_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     현재 내 후 포인트 현황
     ------------------------------------------------------------------------------------------------------------- """
     user = update.effective_user.first_name
-    day_time = datetime.now()
-    day = str(day_time).split(' ')[0]
     total = point_dict[user]["total"]
 
-    await update.message.reply_text(f"{user}님의 자산현황 \n 오늘 {point_dict[user][day]}후 획득! \n 총 자산 {total}후")
+    await update.message.reply_text(f"{user}님의 자산현황 \n 오늘 {point_dict[user][last_day]}후 획득! \n 총 자산 {total}후")
 
-async def jum_me_chu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def jum_me_chu_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """ -------------------------------------------------------------------------------------------------------------
     점심 메뉴 추천
     ------------------------------------------------------------------------------------------------------------- """
     user = update.effective_user.first_name
     await update.message.reply_text(f"{user}! 너의 점심은 킹까스다!!",reply_markup=markup,)
-
     return CHOOSING
+async def jum_me_chu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """ -------------------------------------------------------------------------------------------------------------
+    점심 메뉴 추천
+    ------------------------------------------------------------------------------------------------------------- """
+    user = update.effective_user.first_name
+    await update.message.reply_text(f"{user}! 너의 점심은 킹까스다!!")
 
 async def chul_seok(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """ -------------------------------------------------------------------------------------------------------------
     출석 체크
     ------------------------------------------------------------------------------------------------------------- """
     user = update.effective_user.first_name
-    day_time = datetime.now()
-    day = str(day_time).split(' ')[0]
     check = "출석"
     if user not in point_dict:
         point_dict[user] = defaultdict(int)
     
-    if point_dict[user][check] == day:
+    if point_dict[user][check] == last_day:
         await update.message.reply_text(f"{user}님은 이미 출석하셨습니다.")
     else:
-        point_dict[user][check] = day
-        point_dict[user][day] += 1000
+        point_dict[user][check] = last_day
+        point_dict[user][last_day] += 1000
         point_dict[user]["total"] += 1000
-        await update.message.reply_text(f"{user}님 {day} 출석!! \n 출석 보상 +1000후 ")
+        await update.message.reply_text(f"{user}님 {last_day} 출석!! \n 출석 보상 +1000후 ")
     ## save the dict
     with open( POINT_NAME, 'wb' ) as pf:
         pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
@@ -229,12 +332,8 @@ async def get_hu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     score = 1
     # add day and score to the dict
-    day_time = datetime.now()
-    day = str(day_time).split(' ')[0]
-    #year, month, day = day.split('-')
-    
-    score_dict[ user ][ day ] += score
-    point_dict[user][day] += 100
+    score_dict[ user ][ last_day ] += score
+    point_dict[user][last_day] += 100
     point_dict[user]["total"] += 100
 
     ## save the dict
@@ -271,12 +370,35 @@ def main() -> None:
         states={
             CHOOSING: [
                 MessageHandler(
-                    filters.Regex(r"점메추"), jum_me_chu
+                    filters.Regex(r"점메추"), jum_me_chu_conv
                 ),
                 MessageHandler(
-                    filters.Regex(r"오늘의 운세"), dice_cmd
+                    filters.Regex(r"오늘의 운세"), dice_cmd_conv
+                ),
+                MessageHandler(
+                    filters.Regex(r"가위 바위 보"), rock_papper_scissor
                 ),
             ],
+            RPS_GAME: [
+                MessageHandler(
+                    filters.Regex(r"네"), load_RPS_game
+                ),
+                MessageHandler(
+                    filters.Regex(r"(a?아니)"), done
+                ),
+            ],
+            USER_CHOICE: [
+                MessageHandler(
+                    filters.Regex(r"가위"), get_RPS_winner
+                ),
+                MessageHandler(
+                    filters.Regex(r"바위"), get_RPS_winner
+                ),
+                MessageHandler(
+                    filters.Regex(r"보"), get_RPS_winner
+                ),
+            ]
+        
         },
         fallbacks=[MessageHandler(filters.Regex("^Done$"), done)],
         name="후후 봇",
