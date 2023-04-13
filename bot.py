@@ -88,7 +88,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """Send a message when the command /help is issued."""
     await update.message.reply_text(
         "명령어 모음 \n /start  : 후후 봇 실행 \n /leaderboard  :  오늘의 한숨왕 \n /my_hu  : 나의 자산(후) 현황 \n" +
-        "/hu_is_king  :  현재 자산(후) 랭킹 \n" +
+        "/hu_is_king  :  현재 자산(후) 랭킹 \n /lucky_hu  :  up&down 연승 랭킹 \n" +
         "'ㅊㅅ' or '출석'  : 출석체크 +1000후 \n 후.. 한번에 +100후"
     )
 """
@@ -100,6 +100,10 @@ async def updown_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user = update.effective_user.first_name
     query = update.callback_query
     await query.answer()
+
+    if not point_dict[user]["victory"]:
+        point_dict[user]["victory"] = 0
+
     context.user_data["updown_game"] = defaultdict(int)
     keyboard = [
         [
@@ -139,6 +143,7 @@ async def updown_play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             game_prize = game_fee
         context.user_data["game_fee"] = game_fee
         context.user_data["prize"] = game_prize
+        context.user_data["victory"] = 0
     
     if point_dict[user]["total"] < game_fee:
         keyboard = [
@@ -246,6 +251,8 @@ async def get_UD_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE)
         context.user_data["prize"] = game_prize
         context.user_data["bot_dice"] = new_bot_choice
         context.user_data["updown_game"] = 1
+        context.user_data["victory"] += 1
+        
 
         keyboard = [
             [
@@ -267,6 +274,7 @@ async def get_UD_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE)
         context.user_data["prize"] = game_prize
         context.user_data["bot_dice"] = new_bot_choice
         context.user_data["updown_game"] = 1
+        context.user_data["victory"] += 1
 
         keyboard = [
             [
@@ -312,7 +320,10 @@ async def calc_prize_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     game_prize = context.user_data["prize"]
     del context.user_data["prize"]
     del context.user_data["updown_game"]
+    vic_in_a_row = context.user_data["victory"]
+    del context.user_data["victory"]
 
+    point_dict[user]["victory"] = vic_in_a_row
     point_dict[user][last_day] += game_prize
     point_dict[user]["total"] += game_prize
     user_account = point_dict[user]["total"]
@@ -501,7 +512,6 @@ async def dice_cmd_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     query = update.callback_query
     await query.answer()
     rand_num = random.randrange(1,4)
-
     keyboard = [
         [
             InlineKeyboardButton("다시하기", callback_data=str(LUCKY_DICE)),
@@ -513,11 +523,15 @@ async def dice_cmd_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     ]
     
     if rand_num == 1:
-        text = f'{user}님의 행운은 \U0001f631 최악입니다.'
+        text = f'{user}님의 행운은 \U0001f631 최악입니다. -1000후'
+        point_dict[user][last_day] -= 1000
+        point_dict[user]["total"] -= 1000
     elif rand_num == 2:
         text = f'{user}님의 행운은 \U0001f610 보통입니다.'
     elif rand_num == 3:
-        text = f'{user}님의 행운은 \U0001f340 최상입니다.'
+        text = f'{user}님의 행운은 \U0001f340 최상입니다. +1000후'
+        point_dict[user][last_day] += 1000
+        point_dict[user]["total"] += 1000
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text=f'오늘의 운세 \n {text}', reply_markup=reply_markup)
     
@@ -550,6 +564,31 @@ async def show_money_leads(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         else:
             medal   = ''
         txt     += f"{ r }. { medal } @{ u } ( { s }후 )\n"
+    await update.message.reply_text((f"{txt}"))
+
+async def show_victory_leads(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """ -------------------------------------------------------------------------------------------------------------
+    Show the victory of up & down in a row leaderboard 
+    ------------------------------------------------------------------------------------------------------------- """
+    txt         = f"\U0001F4C5 LEADERBOARD OF DAY { last_day }\n\n"
+    vic_lead_dict   = dict()
+
+    for user in point_dict:
+        if "victory" in point_dict[user]:
+            vic_lead_dict[user] = point_dict[user]["victory"]
+
+    sorting     = lambda x: ( x[ 1 ], x[ 0 ] )
+    vic_lead_list   = [ ( k, v ) for k, v in sorted( vic_lead_dict.items(), key=sorting, reverse=True) ]
+    for r, ( u, s ) in enumerate( vic_lead_list, 1 ):
+        if r == 1:
+            medal   = "\U0001F947"
+        elif r == 2:
+            medal   = "\U0001F948"
+        elif r == 3:
+            medal   = "\U0001F949"
+        else:
+            medal   = ''
+        txt     += f"{ r }. { medal } @{ u } ( { s }연승! )\n"
     await update.message.reply_text((f"{txt}"))
 
 def show_day_lead( update, context ):
@@ -646,6 +685,54 @@ async def chul_seok(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         point_dict[user][day] += 1000
         point_dict[user]["total"] += 1000
         await update.message.reply_text(f"{user}님 {day} 출석!! \n 출석 보상 +1000후 ")
+    ## save the dict
+    with open( POINT_NAME, 'wb' ) as pf:
+        pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
+
+async def go_home(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """ -------------------------------------------------------------------------------------------------------------
+    퇴근 체크
+    ------------------------------------------------------------------------------------------------------------- """
+    user = update.effective_user.first_name
+    if user not in point_dict:
+        point_dict[user] = defaultdict(int)
+
+    day_time = datetime.now()
+    day = str(day_time).split(' ')[0]
+    _time = str(day_time).split(' ')[1]
+    _time = _time.split('.')[0]
+
+    now = datetime.now(pytz.timezone('Asia/Seoul'))
+    scheduled_time_5 = datetime(now.year, now.month, now.day, 17, 0, 0, tzinfo=pytz.timezone('Asia/Seoul'))
+    scheduled_time_6 = datetime(now.year, now.month, now.day, 18, 0, 0, tzinfo=pytz.timezone('Asia/Seoul'))
+    sch_time_5 = str(scheduled_time_5).split(' ')[1]
+    sch_time_5 = sch_time_5.split('+')[0]
+    sch_time_6 = str(scheduled_time_6).split(' ')[1]
+    sch_time_6 = sch_time_6.split('+')[0]
+
+    time_1 = datetime.strptime(_time,"%H:%M:%S")
+    time_2 = datetime.strptime(sch_time_5,"%H:%M:%S")
+    time_3 = datetime.strptime(sch_time_6,"%H:%M:%S")
+    time_interval_5 = time_2 - time_1
+    time_interval_6 = time_3 - time_1
+    
+    check = "퇴근"
+    if point_dict[user][check] == day:
+        await update.message.reply_text(f"{user}님은 이미 퇴근하셨습니다.")
+    else:
+        if time_interval_5.days >= 0:
+            hms_5 = str(timedelta(seconds=time_interval_5.seconds))
+            h5,m5,s5 = hms_5.split(':')
+            hms_6 = str(timedelta(seconds=time_interval_6.seconds))
+            h6,m6,s6 = hms_6.split(':')
+            reply_text = f"퇴근 까지 {h5}시간 {m5}분 {s5}초 남았습니다. - 17시 퇴근 \n"
+            reply_text += f"퇴근 까지 {h6}시간 {m6}분 {s6}초 남았습니다. - 18시 퇴근 \n"
+            await update.message.reply_text(text=reply_text)
+        else:
+            point_dict[user][check] = day
+            point_dict[user][day] += 1000
+            point_dict[user]["total"] += 1000
+            await update.message.reply_text(f"{user}님 {day} 퇴근!! \n 오늘 하루 고생하셨습니다. +1000후 ")
     ## save the dict
     with open( POINT_NAME, 'wb' ) as pf:
         pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
@@ -761,13 +848,16 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("leaderboard", show_leads))
     application.add_handler(CommandHandler("hu_is_king", show_money_leads))
+    application.add_handler(CommandHandler("lucky_hu", show_victory_leads))
     application.add_handler(CommandHandler("my_hu", my_point_cmd))
+    
 
     # on non command i.e message - echo the message on Telegram
     #application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
     application.add_handler(MessageHandler(filters.Regex(r'(a?후)'), get_hu))
     application.add_handler(MessageHandler(filters.Regex(r'ㅊㅅ'), chul_seok))
     application.add_handler(MessageHandler(filters.Regex(r'출석'), chul_seok))
+    application.add_handler(MessageHandler(filters.Regex(r'ㅌㄱ'), go_home))
     #application.add_handler(MessageHandler(filters.Regex(r'test'), bot_test))
     
     #updater = Updater(TOKEN)
