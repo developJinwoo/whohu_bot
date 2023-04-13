@@ -167,7 +167,7 @@ async def updown_play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             bot_dice = random.randrange(1,7)
             context.user_data["bot_dice"] = bot_dice
         reply_text = f"UP & DOWN 게임을 시작합니다. \n"
-        reply_text += f"맞추면 {game_prize}후를 얻고 실패시 {game_fee}를 잃습니다. \n"
+        reply_text += f"맞추면 {game_prize}후를 얻고 실패시 {game_fee}후를 잃습니다. \n"
         reply_text += f"후후봇 주사위 눈금은 \U0001f3b2 {bot_dice}입니다. \n "
         reply_text += "UP! or DOWN!"
         keyboard = [
@@ -222,7 +222,7 @@ async def get_UD_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         reply_text = "주사위 눈금이 같습니다. 후.. \n"
         reply_text += f"이전 주사위 : \U0001f3b2 {bot_dice} : {new_bot_choice} \U0001f3b2 : 현재 주사위 \n"
-        reply_text += f"{user}님의 선택은 {user_choice} \n"
+        reply_text += f"{user}님의 선택은 {user_emoji} {user_choice} \n"
         reply_text += "정답을 맞추지 못 하였습니다. \U0001f62d\U0001f62d \n"
         reply_text += f"{user}님의 현재 잔액은 {user_account}후 입니다."
         keyboard = [
