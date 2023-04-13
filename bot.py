@@ -40,9 +40,10 @@ POINT_NAME          = "point.pickle"
 score_dict          = dict()
 point_dict          = dict()
 
-START_ROUTES, END_ROUTES, RPS_ROUTES = range(3)
+START_ROUTES, END_ROUTES, RPS_ROUTES, UPDOWN_ROUTES = range(4)
 PLAY_RPS_GAME, PLAY_RPS_GAME_500, PLAY_RPS_GAME_1000, ROCK, PAPPER, SCISSOR, END_GAME = range(7)
-MENU_CHU, LUCKY_DICE, LOAD_RPS, END, START_OVER = range(5)
+MENU_CHU, LUCKY_DICE, LOAD_RPS, LOAD_UPDOWN, END, START_OVER = range(6)
+UP, DOWN, PLAY_UD_GAME, PLAY_UD_GAME_1000, CALC_PRIZE = range(5)
 
 def facts_to_str(user_data: Dict[str, str]) -> str:
     """Helper function for formatting the gathered user info."""
@@ -69,12 +70,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = [
         [
             InlineKeyboardButton("\U0001f37d\uFE0F 점메추", callback_data=str(MENU_CHU)),
-            InlineKeyboardButton("\U0001f3b2 오늘의 운세", callback_data=str(LUCKY_DICE)),
+            InlineKeyboardButton("\U0001f52e 오늘의 운세", callback_data=str(LUCKY_DICE)),
         ],
         [
             InlineKeyboardButton("\u270C\uFE0F \u270A \U0001f590\uFE0F 가위 바위 보!", callback_data=str(LOAD_RPS)),
-            InlineKeyboardButton("종료", callback_data=str(END)),
+            InlineKeyboardButton("\U0001f3b2 업 앤 다운", callback_data=str(LOAD_UPDOWN)),
         ],
+        [
+            InlineKeyboardButton("종료", callback_data=str(END)),
+        ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("\U0001f916 후후봇입니다. 후..", reply_markup=reply_markup)
@@ -87,7 +91,250 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/hu_is_king  :  현재 자산(후) 랭킹 \n" +
         "'ㅊㅅ' or '출석'  : 출석체크 +1000후 \n 후.. 한번에 +100후"
     )
+"""
+--------------------------------------------------------------------------------------------------------------------------
+업 & 다운 게임
+--------------------------------------------------------------------------------------------------------------------------
+"""
+async def updown_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user.first_name
+    query = update.callback_query
+    await query.answer()
+    context.user_data["updown_game"] = defaultdict(int)
+    keyboard = [
+        [
+            InlineKeyboardButton("100후", callback_data=str(PLAY_UD_GAME)),
+            InlineKeyboardButton("1000후", callback_data=str(PLAY_UD_GAME_1000)),
+        ],
+        [
+            InlineKeyboardButton("종료", callback_data=str(END_GAME)),
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    reply_text = "\u2B06\uFE0F UP! & \u2B07\uFE0F DOWN! 게임입니다. \n"
+    reply_text += "후후봇이 굴린 주사위보다 높을지 낮을지 맞추는 게임입니다. \n"
+    reply_text += "맞추면 상금 2배 틀리면 베팅한돈을 잃습니다. \n"
+    reply_text += f"{user}님 얼마를 걸고 게임하시겠습니까? \n"
+    await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
+    return UPDOWN_ROUTES
 
+async def updown_play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    query_data = update.callback_query.data
+    # call_query = update.callback_query # Debug
+    # await query.edit_message_text(text=f'{call_query}') # Debug
+    user = update.effective_user.first_name
+
+    if context.user_data["updown_game"]:
+        game_fee = context.user_data["game_fee"]
+        game_prize = context.user_data["prize"] * 2
+        context.user_data["prize"] = game_prize
+    else:
+        if query_data == '2':
+            game_fee = 100
+            game_prize = game_fee
+        elif query_data == '3':
+            game_fee = 1000
+            game_prize = game_fee
+        context.user_data["game_fee"] = game_fee
+        context.user_data["prize"] = game_prize
+    
+    if point_dict[user]["total"] < game_fee:
+        keyboard = [
+            [
+                InlineKeyboardButton("처음으로", callback_data=str(START_OVER)),
+                InlineKeyboardButton("종료하기", callback_data=str(END)),
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(text="후가 부족합니다. 후..", reply_markup=reply_markup)
+        return END_ROUTES
+    else:
+        if context.user_data["updown_game"]:
+            bot_dice = context.user_data["bot_dice"]
+        else:
+            bot_dice = random.randrange(1,7)
+            context.user_data["bot_dice"] = bot_dice
+        reply_text = f"UP & DOWN 게임을 시작합니다. \n"
+        reply_text += f"맞추면 {game_prize}후를 얻고 실패시 {game_fee}를 잃습니다. \n"
+        reply_text += f"후후봇 주사위 눈금은 \U0001f3b2 {bot_dice}입니다. \n "
+        reply_text += "UP! or DOWN!"
+        keyboard = [
+            [
+                InlineKeyboardButton("UP!", callback_data=str(UP)),
+                InlineKeyboardButton("DOWN!", callback_data=str(DOWN)),
+            ],
+            [
+                InlineKeyboardButton("종료", callback_data=str(END_GAME)),
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
+        return UPDOWN_ROUTES
+    
+async def get_UD_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """ -------------------------------------------------------------------------------------------------------------
+    업 & 다운 conv
+    ------------------------------------------------------------------------------------------------------------- """
+    user = update.effective_user.first_name
+    query_data = update.callback_query.data
+    query = update.callback_query
+    await query.answer()
+    bot_dice = context.user_data["bot_dice"]
+    game_fee = context.user_data["game_fee"]
+    game_prize = context.user_data["prize"]
+    
+    data_trans: dict[str, str] = {'0': '업!',
+                             '1': '다운!'}
+    user_choice = data_trans[query_data]
+    new_bot_choice = random.randrange(1,7)
+    if bot_dice == new_bot_choice:
+        point_dict[user][last_day] -= game_fee
+        point_dict[user]["total"] -= game_fee
+        user_account = point_dict[user]["total"]
+        del context.user_data["bot_dice"]
+        del context.user_data["game_fee"]
+        if context.user_data["updown_game"]:
+            del context.user_data["prize"]
+
+        reply_text = "주사위 눈금이 같습니다. 후.. \n"
+        reply_text += f"이전 주사위 : \U0001f3b2 {bot_dice} : {new_bot_choice} \U0001f3b2 : 현재 주사위 \n"
+        reply_text += f"{user}님의 선택은 {user_choice} \n"
+        reply_text += "정답을 맞추지 못 하였습니다. \U0001f62d\U0001f62d \n"
+        reply_text += f"{user}님의 현재 잔액은 {user_account}후 입니다."
+        keyboard = [
+            [
+                InlineKeyboardButton("다시하기", callback_data=str(LOAD_UPDOWN)),
+                InlineKeyboardButton("종료하기", callback_data=str(END)),
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
+        return START_ROUTES
+    
+    elif bot_dice < new_bot_choice and user_choice == '다운!':
+        point_dict[user][last_day] -= game_fee
+        point_dict[user]["total"] -= game_fee
+        user_account = point_dict[user]["total"]
+        del context.user_data["bot_dice"]
+        del context.user_data["game_fee"]
+        if context.user_data["updown_game"]:
+            del context.user_data["prize"]
+
+        reply_text = "주사위가 굴려졌습니다. 후.. \n"
+        reply_text += f"이전 주사위 : \U0001f3b2 {bot_dice}  :  {new_bot_choice} \U0001f3b2 \U0001f199 : 현재 주사위 \n"
+        reply_text += f"{user}님의 선택은 \u2B07\uFE0F {user_choice} \n"
+        reply_text += "정답을 맞추지 못 하였습니다. \U0001f62d\U0001f62d \n"
+        reply_text += f"{user}님의 현재 잔액은 {user_account}후 입니다."
+        keyboard = [
+            [
+                InlineKeyboardButton("다시하기", callback_data=str(LOAD_UPDOWN)),
+                InlineKeyboardButton("종료하기", callback_data=str(END)),
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
+        return START_ROUTES
+    elif bot_dice < new_bot_choice and user_choice == '업!':
+        reply_text = "주사위가 굴려졌습니다. 후.. \n"
+        reply_text += f"이전 주사위 : \U0001f3b2 {bot_dice} : {new_bot_choice} \U0001f3b2 \U0001f199 : 현재 주사위 \n"
+        reply_text += f"{user}님의 선택은 \u2B06\uFE0F {user_choice} \n"
+        reply_text += f"정답을 맞추셨습니다. 현재 상금 {game_prize}후\n"
+        reply_text += "한 번 더 하시겠습니까? \n"
+
+        context.user_data["prize"] = game_prize
+        context.user_data["bot_dice"] = new_bot_choice
+        context.user_data["updown_game"] = 1
+
+        keyboard = [
+            [
+                InlineKeyboardButton("한 번 더 베팅", callback_data=str(PLAY_UD_GAME)),
+                InlineKeyboardButton("그만하기", callback_data=str(CALC_PRIZE)),
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
+        return UPDOWN_ROUTES
+    
+    elif bot_dice > new_bot_choice and user_choice == '다운!':
+        reply_text = "주사위가 굴려졌습니다. 후.. \n"
+        reply_text += f"이전 주사위 : \U0001f199 \U0001f3b2 {bot_dice} :  {new_bot_choice} \U0001f3b2 : 현재 주사위 \n"
+        reply_text += f"{user}님의 선택은 \u2B07\uFE0F {user_choice} \n"
+        reply_text += f"정답을 맞추셨습니다. 현재 상금 {game_prize}후\n"
+        reply_text += "한번더 하시겠습니까? \n"
+        
+        context.user_data["prize"] = game_prize
+        context.user_data["bot_dice"] = new_bot_choice
+        context.user_data["updown_game"] = 1
+
+        keyboard = [
+            [
+                InlineKeyboardButton("한 번 더 베팅", callback_data=str(PLAY_UD_GAME)),
+                InlineKeyboardButton("그만하기", callback_data=str(CALC_PRIZE)),
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
+        return UPDOWN_ROUTES
+
+    elif bot_dice > new_bot_choice and user_choice == '업!':
+        point_dict[user][last_day] -= game_fee
+        point_dict[user]["total"] -= game_fee
+        user_account = point_dict[user]["total"]
+        del context.user_data["bot_dice"]
+        del context.user_data["game_fee"]
+        if context.user_data["updown_game"]:
+            del context.user_data["prize"]
+
+        reply_text = "주사위가 굴려졌습니다. 후.. \n"
+        reply_text += f"이전 주사위 : \U0001f199 \U0001f3b2 {bot_dice}  : {new_bot_choice} \U0001f3b2 : 현재 주사위 \n"
+        reply_text += f"{user}님의 선택은 \u2B06\uFE0F {user_choice} \n"
+        reply_text += "정답을 맞추지 못 하였습니다. \U0001f62d\U0001f62d \n"
+        reply_text += f"{user}님의 현재 잔액은 {user_account}후 입니다."
+        keyboard = [
+            [
+                InlineKeyboardButton("다시하기", callback_data=str(LOAD_UPDOWN)),
+                InlineKeyboardButton("종료하기", callback_data=str(END)),
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
+        return START_ROUTES
+    
+async def calc_prize_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user.first_name
+    query_data = update.callback_query.data
+    query = update.callback_query
+    await query.answer()
+    del context.user_data["bot_dice"]
+    del context.user_data["game_fee"]
+    game_prize = context.user_data["prize"]
+    del context.user_data["prize"]
+    del context.user_data["updown_game"]
+
+    point_dict[user][last_day] += game_prize
+    point_dict[user]["total"] += game_prize
+    user_account = point_dict[user]["total"]
+    
+    reply_text = "축하합니다!!! \U0001f389\U0001f389\U0001f389 \n"
+    reply_text += f"상금 {game_prize}후를 획득하셨습니다. \n"
+    reply_text += f"{user}님은 현재 {user_account}후를 보유하고 있습니다. \n"
+    keyboard = [
+        [
+            InlineKeyboardButton("다시하기", callback_data=str(LOAD_UPDOWN)),
+            InlineKeyboardButton("종료하기", callback_data=str(END)),
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
+    return START_ROUTES
+
+"""
+--------------------------------------------------------------------------------------------------------------------------
+가위바위보 게임
+--------------------------------------------------------------------------------------------------------------------------
+"""
 async def rock_papper_scissor_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user.first_name
     query = update.callback_query
@@ -114,7 +361,6 @@ async def rock_papper_scissor_play(update: Update, context: ContextTypes.DEFAULT
     query_data = update.callback_query.data
     # call_query = update.callback_query # Debug
     # await query.edit_message_text(text=f'{call_query}') # Debug
-    query_data = update.callback_query.data
     user = update.effective_user.first_name
     if query_data == '0':
         game_fee = 100
@@ -146,6 +392,9 @@ async def rock_papper_scissor_play(update: Update, context: ContextTypes.DEFAULT
                 InlineKeyboardButton("\u270C\uFE0F", callback_data=str(SCISSOR)),
                 InlineKeyboardButton("\u270A", callback_data=str(ROCK)),
                 InlineKeyboardButton("\U0001f590\uFE0F", callback_data=str(PAPPER)),
+            ],
+            [
+                InlineKeyboardButton("종료", callback_data=str(END_GAME)),
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -479,6 +728,11 @@ def main() -> None:
                 CallbackQueryHandler(jum_me_chu_conv, pattern="^" + str(MENU_CHU) + "$"),
                 CallbackQueryHandler(dice_cmd_conv, pattern="^" + str(LUCKY_DICE) + "$"),
                 CallbackQueryHandler(rock_papper_scissor_conv, pattern="^" + str(LOAD_RPS) + "$"),
+                CallbackQueryHandler(updown_conv, pattern="^" + str(LOAD_UPDOWN) + "$"),
+                CallbackQueryHandler(end, pattern="^" + str(END) + "$"),
+            ],
+            END_ROUTES: [
+                CallbackQueryHandler(start, pattern="^" + str(START_OVER) + "$"),
                 CallbackQueryHandler(end, pattern="^" + str(END) + "$"),
             ],
             RPS_ROUTES: [
@@ -490,10 +744,15 @@ def main() -> None:
                 CallbackQueryHandler(get_RPS_winner_conv, pattern="^" + str(SCISSOR) + "$"),
                 CallbackQueryHandler(end, pattern="^" + str(END_GAME) + "$"),
             ],
-            END_ROUTES: [
-                CallbackQueryHandler(start, pattern="^" + str(START_OVER) + "$"),
-                CallbackQueryHandler(end, pattern="^" + str(END) + "$"),
+            UPDOWN_ROUTES: [
+                CallbackQueryHandler(updown_play, pattern="^" + str(PLAY_UD_GAME) + "$"),
+                CallbackQueryHandler(updown_play, pattern="^" + str(PLAY_UD_GAME_1000) + "$"),
+                CallbackQueryHandler(get_UD_winner_conv, pattern="^" + str(UP) + "$"),
+                CallbackQueryHandler(get_UD_winner_conv, pattern="^" + str(DOWN) + "$"),
+                CallbackQueryHandler(calc_prize_conv, pattern="^" + str(CALC_PRIZE) + "$"),
+                CallbackQueryHandler(end, pattern="^" + str(END_GAME) + "$"),
             ]
+
         },
         fallbacks=[CommandHandler("end", end)],
     )
