@@ -40,10 +40,9 @@ POINT_NAME          = "point.pickle"
 score_dict          = dict()
 point_dict          = dict()
 
-CHOOSING, RPS_GAME, USER_CHOICE = range(3)
 START_ROUTES, END_ROUTES, RPS_ROUTES = range(3)
-PLAY_RPS_GAME, ROCK, PAPPER, SCISSOR = range(4)
-MENU_CHU, LUCKY_DICE, LOAD_RPS, END, START_OVER, END_GAME = range(6)
+PLAY_RPS_GAME, PLAY_RPS_GAME_500, PLAY_RPS_GAME_1000, ROCK, PAPPER, SCISSOR, END_GAME = range(7)
+MENU_CHU, LUCKY_DICE, LOAD_RPS, END, START_OVER = range(5)
 
 def facts_to_str(user_data: Dict[str, str]) -> str:
     """Helper function for formatting the gathered user info."""
@@ -84,17 +83,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /help is issued."""
     await update.message.reply_text(
-        "명령어 모음 \n /start  : 후후 봇 실행 \n /leaderboard  :  오늘의 한숨왕 \n /dice  :  오늘의 운세 \n /my_hu  : 나의 자산(후) 현황 \n" +
+        "명령어 모음 \n /start  : 후후 봇 실행 \n /leaderboard  :  오늘의 한숨왕 \n /my_hu  : 나의 자산(후) 현황 \n" +
         "/hu_is_king  :  현재 자산(후) 랭킹 \n" +
         "'ㅊㅅ' or '출석'  : 출석체크 +1000후 \n 후.. 한번에 +100후"
     )
-async def rock_papper_scissor(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user = update.effective_user.first_name
-    reply_text = "가위 바위 보 게임입니다. \n"
-    reply_text += f"{user}님 100후를 걸고 게임하시겠습니까? \n"
-    reply_text += "(네/아니요)"
-    await update.message.reply_text(reply_text)
-    return RPS_GAME
 
 async def rock_papper_scissor_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user.first_name
@@ -102,21 +94,36 @@ async def rock_papper_scissor_conv(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
     keyboard = [
         [
-            InlineKeyboardButton("Yes (100후 차감)", callback_data=str(PLAY_RPS_GAME)),
-            InlineKeyboardButton("No", callback_data=str(END_GAME)),
+            InlineKeyboardButton("100후", callback_data=str(PLAY_RPS_GAME)),
+            InlineKeyboardButton("500후", callback_data=str(PLAY_RPS_GAME_500)),
+            InlineKeyboardButton("1000후", callback_data=str(PLAY_RPS_GAME_1000)),
+        ],
+        [
+            InlineKeyboardButton("종료", callback_data=str(END_GAME)),
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     reply_text = "가위 바위 보 게임입니다. \n"
-    reply_text += f"{user}님 100후를 걸고 게임하시겠습니까? \n"
+    reply_text += f"{user}님 얼마를 걸고 게임하시겠습니까? \n"
     await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
     return RPS_ROUTES
 
 async def rock_papper_scissor_play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
+    query_data = update.callback_query.data
+    # call_query = update.callback_query # Debug
+    # await query.edit_message_text(text=f'{call_query}') # Debug
+    query_data = update.callback_query.data
     user = update.effective_user.first_name
-    game_fee = 100
+    if query_data == '0':
+        game_fee = 100
+    elif query_data == '1':
+        game_fee = 500
+    elif query_data == '2':
+        game_fee = 1000
+
+    context.user_data["game_fee"] = game_fee
     if point_dict[user]["total"] < game_fee:
         keyboard = [
             [
@@ -153,12 +160,12 @@ async def get_RPS_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE
     query_data = update.callback_query.data
     query = update.callback_query
     await query.answer()
-    #call_query = update.callback_query
-    #await query.edit_message_text(text=f'{call_query}') # Debug
+    # call_query = update.callback_query
+    # await query.edit_message_text(text=f'{call_query}') # Debug
     
-    data_trans: dict[str, str] = {'3': '가위',
-                             '2': '보',
-                             '1': '바위'}
+    data_trans: dict[str, str] = {'5': '가위',
+                             '4': '보',
+                             '3': '바위'}
     rules: dict[str, str] = {'바위': '가위',
                              '가위': '보',
                              '보': '바위'}
@@ -168,7 +175,8 @@ async def get_RPS_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_emoji = get_emoji(user_choice)
     bot_emoji = get_emoji(bot_choice)
 
-    game_fee = 100
+    game_fee = context.user_data["game_fee"]
+    del context.user_data["game_fee"]
     user_account = point_dict[user]["total"]
     if user_choice == bot_choice:
         reply_text = "비겼습니다. 후.. \n"
@@ -475,6 +483,8 @@ def main() -> None:
             ],
             RPS_ROUTES: [
                 CallbackQueryHandler(rock_papper_scissor_play, pattern="^" + str(PLAY_RPS_GAME) + "$"),
+                CallbackQueryHandler(rock_papper_scissor_play, pattern="^" + str(PLAY_RPS_GAME_500) + "$"),
+                CallbackQueryHandler(rock_papper_scissor_play, pattern="^" + str(PLAY_RPS_GAME_1000) + "$"),
                 CallbackQueryHandler(get_RPS_winner_conv, pattern="^" + str(ROCK) + "$"),
                 CallbackQueryHandler(get_RPS_winner_conv, pattern="^" + str(PAPPER) + "$"),
                 CallbackQueryHandler(get_RPS_winner_conv, pattern="^" + str(SCISSOR) + "$"),
