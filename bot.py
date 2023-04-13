@@ -43,7 +43,7 @@ point_dict          = dict()
 START_ROUTES, END_ROUTES, RPS_ROUTES, UPDOWN_ROUTES = range(4)
 PLAY_RPS_GAME, PLAY_RPS_GAME_500, PLAY_RPS_GAME_1000, ROCK, PAPPER, SCISSOR, END_GAME = range(7)
 MENU_CHU, LUCKY_DICE, LOAD_RPS, LOAD_UPDOWN, END, START_OVER = range(6)
-UP, DOWN, PLAY_UD_GAME, PLAY_UD_GAME_1000, CALC_PRIZE = range(5)
+UP, DOWN, SAME, PLAY_UD_GAME, PLAY_UD_GAME_1000, CALC_PRIZE = range(6)
 
 def facts_to_str(user_data: Dict[str, str]) -> str:
     """Helper function for formatting the gathered user info."""
@@ -103,6 +103,8 @@ async def updown_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     if not point_dict[user]["victory"]:
         point_dict[user]["victory"] = 0
+    if not point_dict[user]["vic_prize"]:
+        point_dict[user]["vic_prize"] = 0
 
     context.user_data["updown_game"] = defaultdict(int)
     keyboard = [
@@ -130,15 +132,18 @@ async def updown_play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     # await query.edit_message_text(text=f'{call_query}') # Debug
     user = update.effective_user.first_name
 
-    if context.user_data["updown_game"]:
+    if context.user_data["updown_game"] == 1:
         game_fee = context.user_data["game_fee"]
         game_prize = context.user_data["prize"] * 2
         context.user_data["prize"] = game_prize
+    elif context.user_data["updown_game"] == 2:
+        game_fee = context.user_data["game_fee"]
+        game_prize = context.user_data["prize"]
     else:
-        if query_data == '2':
+        if query_data == '3':
             game_fee = 100
             game_prize = game_fee
-        elif query_data == '3':
+        elif query_data == '4':
             game_fee = 1000
             game_prize = game_fee
         context.user_data["game_fee"] = game_fee
@@ -168,6 +173,7 @@ async def updown_play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         keyboard = [
             [
                 InlineKeyboardButton("UP!", callback_data=str(UP)),
+                InlineKeyboardButton("SAME!(x4)", callback_data=str(SAME)),
                 InlineKeyboardButton("DOWN!", callback_data=str(DOWN)),
             ],
             [
@@ -178,6 +184,14 @@ async def updown_play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
         return UPDOWN_ROUTES
     
+def choice_emoji(choice: str):
+    if choice == "업!":
+        return '\u2B06\uFE0F'
+    elif choice == "다운!":
+        return '\u2B07\uFE0F'
+    elif choice == "동률!":
+        return '\U0001f7f0'
+
 async def get_UD_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """ -------------------------------------------------------------------------------------------------------------
     업 & 다운 conv
@@ -191,10 +205,13 @@ async def get_UD_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE)
     game_prize = context.user_data["prize"]
     
     data_trans: dict[str, str] = {'0': '업!',
-                             '1': '다운!'}
+                             '1': '다운!',
+                             '2': '동률!'}
+    
     user_choice = data_trans[query_data]
+    user_emoji = choice_emoji(user_choice)
     new_bot_choice = random.randrange(1,7)
-    if bot_dice == new_bot_choice:
+    if bot_dice == new_bot_choice and user_choice != '동률!':
         point_dict[user][last_day] -= game_fee
         point_dict[user]["total"] -= game_fee
         user_account = point_dict[user]["total"]
@@ -217,8 +234,30 @@ async def get_UD_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE)
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
         return START_ROUTES
+    elif bot_dice == new_bot_choice and user_choice == '동률!':
+        game_prize *= 4
+        reply_text = "주사위 눈금이 같습니다. 후.. \n"
+        reply_text += f"이전 주사위 : \U0001f3b2 {bot_dice} : {new_bot_choice} \U0001f3b2 : 현재 주사위 \n"
+        reply_text += f"{user}님의 선택은 {user_emoji} {user_choice} \n"
+        reply_text += f"정답을 맞추셨습니다. 현재 상금 {game_prize}후\n"
+        reply_text += "한 번 더 하시겠습니까? \n"
+
+        context.user_data["prize"] = game_prize
+        context.user_data["bot_dice"] = new_bot_choice
+        context.user_data["updown_game"] = 2
+        context.user_data["victory"] += 1
+        
+        keyboard = [
+            [
+                InlineKeyboardButton("한 번 더 베팅", callback_data=str(PLAY_UD_GAME)),
+                InlineKeyboardButton("그만하기", callback_data=str(CALC_PRIZE)),
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
+        return UPDOWN_ROUTES
     
-    elif bot_dice < new_bot_choice and user_choice == '다운!':
+    elif bot_dice < new_bot_choice and user_choice != '업!':
         point_dict[user][last_day] -= game_fee
         point_dict[user]["total"] -= game_fee
         user_account = point_dict[user]["total"]
@@ -229,7 +268,7 @@ async def get_UD_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         reply_text = "주사위가 굴려졌습니다. 후.. \n"
         reply_text += f"이전 주사위 : \U0001f3b2 {bot_dice}  :  {new_bot_choice} \U0001f3b2 \U0001f199 : 현재 주사위 \n"
-        reply_text += f"{user}님의 선택은 \u2B07\uFE0F {user_choice} \n"
+        reply_text += f"{user}님의 선택은 {user_emoji} {user_choice} \n"
         reply_text += "정답을 맞추지 못 하였습니다. \U0001f62d\U0001f62d \n"
         reply_text += f"{user}님의 현재 잔액은 {user_account}후 입니다."
         keyboard = [
@@ -244,7 +283,7 @@ async def get_UD_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE)
     elif bot_dice < new_bot_choice and user_choice == '업!':
         reply_text = "주사위가 굴려졌습니다. 후.. \n"
         reply_text += f"이전 주사위 : \U0001f3b2 {bot_dice} : {new_bot_choice} \U0001f3b2 \U0001f199 : 현재 주사위 \n"
-        reply_text += f"{user}님의 선택은 \u2B06\uFE0F {user_choice} \n"
+        reply_text += f"{user}님의 선택은 {user_emoji} {user_choice} \n"
         reply_text += f"정답을 맞추셨습니다. 현재 상금 {game_prize}후\n"
         reply_text += "한 번 더 하시겠습니까? \n"
 
@@ -253,7 +292,6 @@ async def get_UD_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE)
         context.user_data["updown_game"] = 1
         context.user_data["victory"] += 1
         
-
         keyboard = [
             [
                 InlineKeyboardButton("한 번 더 베팅", callback_data=str(PLAY_UD_GAME)),
@@ -267,7 +305,7 @@ async def get_UD_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE)
     elif bot_dice > new_bot_choice and user_choice == '다운!':
         reply_text = "주사위가 굴려졌습니다. 후.. \n"
         reply_text += f"이전 주사위 : \U0001f199 \U0001f3b2 {bot_dice} :  {new_bot_choice} \U0001f3b2 : 현재 주사위 \n"
-        reply_text += f"{user}님의 선택은 \u2B07\uFE0F {user_choice} \n"
+        reply_text += f"{user}님의 선택은 {user_emoji} {user_choice} \n"
         reply_text += f"정답을 맞추셨습니다. 현재 상금 {game_prize}후\n"
         reply_text += "한번더 하시겠습니까? \n"
         
@@ -286,7 +324,7 @@ async def get_UD_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
         return UPDOWN_ROUTES
 
-    elif bot_dice > new_bot_choice and user_choice == '업!':
+    elif bot_dice > new_bot_choice and user_choice != '다운!':
         point_dict[user][last_day] -= game_fee
         point_dict[user]["total"] -= game_fee
         user_account = point_dict[user]["total"]
@@ -297,7 +335,7 @@ async def get_UD_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         reply_text = "주사위가 굴려졌습니다. 후.. \n"
         reply_text += f"이전 주사위 : \U0001f199 \U0001f3b2 {bot_dice}  : {new_bot_choice} \U0001f3b2 : 현재 주사위 \n"
-        reply_text += f"{user}님의 선택은 \u2B06\uFE0F {user_choice} \n"
+        reply_text += f"{user}님의 선택은 {user_emoji} {user_choice} \n"
         reply_text += "정답을 맞추지 못 하였습니다. \U0001f62d\U0001f62d \n"
         reply_text += f"{user}님의 현재 잔액은 {user_account}후 입니다."
         keyboard = [
@@ -323,7 +361,10 @@ async def calc_prize_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     vic_in_a_row = context.user_data["victory"]
     del context.user_data["victory"]
 
-    point_dict[user]["victory"] = vic_in_a_row
+    if point_dict[user]["victory"] < vic_in_a_row:
+        point_dict[user]["victory"] = vic_in_a_row
+        point_dict[user]["vic_prize"] = game_prize
+
     point_dict[user][last_day] += game_prize
     point_dict[user]["total"] += game_prize
     user_account = point_dict[user]["total"]
@@ -339,6 +380,9 @@ async def calc_prize_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
+    ## save the dict
+    with open( POINT_NAME, 'wb' ) as pf:
+        pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
     return START_ROUTES
 
 """
@@ -572,10 +616,12 @@ async def show_victory_leads(update: Update, context: ContextTypes.DEFAULT_TYPE)
     ------------------------------------------------------------------------------------------------------------- """
     txt         = f"\U0001F4C5 LEADERBOARD OF DAY { last_day }\n\n"
     vic_lead_dict   = dict()
+    vic_prize_lead_dict   = dict()
 
     for user in point_dict:
         if "victory" in point_dict[user]:
             vic_lead_dict[user] = point_dict[user]["victory"]
+            vic_prize_lead_dict[user] = point_dict[user]["vic_prize"]
 
     sorting     = lambda x: ( x[ 1 ], x[ 0 ] )
     vic_lead_list   = [ ( k, v ) for k, v in sorted( vic_lead_dict.items(), key=sorting, reverse=True) ]
@@ -588,7 +634,8 @@ async def show_victory_leads(update: Update, context: ContextTypes.DEFAULT_TYPE)
             medal   = "\U0001F949"
         else:
             medal   = ''
-        txt     += f"{ r }. { medal } @{ u } ( { s }연승! )\n"
+        vic_prize = vic_prize_lead_dict[u]
+        txt     += f"{ r }. { medal } @{ u } ( { s }연승! {vic_prize}후 획득! )\n"
     await update.message.reply_text((f"{txt}"))
 
 def show_day_lead( update, context ):
@@ -836,6 +883,7 @@ def main() -> None:
                 CallbackQueryHandler(updown_play, pattern="^" + str(PLAY_UD_GAME_1000) + "$"),
                 CallbackQueryHandler(get_UD_winner_conv, pattern="^" + str(UP) + "$"),
                 CallbackQueryHandler(get_UD_winner_conv, pattern="^" + str(DOWN) + "$"),
+                CallbackQueryHandler(get_UD_winner_conv, pattern="^" + str(SAME) + "$"),
                 CallbackQueryHandler(calc_prize_conv, pattern="^" + str(CALC_PRIZE) + "$"),
                 CallbackQueryHandler(end, pattern="^" + str(END_GAME) + "$"),
             ]
