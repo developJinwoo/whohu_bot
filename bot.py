@@ -17,6 +17,7 @@ from telegram.ext import (
     PicklePersistence,
     CommandHandler,
     ContextTypes,
+    CallbackContext,
     MessageHandler,
     filters,
 )
@@ -26,8 +27,12 @@ from collections import defaultdict
 import random
 from datetime import datetime, timedelta
 import pytz
+import requests
+import schedule
+from apscheduler.schedulers.blocking import BlockingScheduler
 
-#from utils import *
+import config
+from slot_machine import slot_conv, slot_play, slot_info, slot_open, get_slot_prize
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -35,15 +40,17 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-LNAME               = "leaderboard.pickle"
-POINT_NAME          = "point.pickle"
+LNAME = config.LNAME
+POINT_NAME = config.POINT_NAME
 score_dict          = dict()
 point_dict          = dict()
 
 START_ROUTES, END_ROUTES, RPS_ROUTES, UPDOWN_ROUTES = range(4)
-PLAY_RPS_GAME, PLAY_RPS_GAME_500, PLAY_RPS_GAME_1000, ROCK, PAPPER, SCISSOR, END_GAME = range(7)
-MENU_CHU, LUCKY_DICE, LOAD_RPS, LOAD_UPDOWN, END, START_OVER = range(6)
+PLAY_RPS_GAME, PLAY_RPS_GAME_500, PLAY_RPS_GAME_1000, ROCK, PAPPER, SCISSOR = range(6)
+MENU_CHU, LUCKY_DICE, LOAD_RPS, LOAD_UPDOWN, LOAD_SLOT = range(5)
 UP, DOWN, SAME, PLAY_UD_GAME, PLAY_UD_GAME_1000, CALC_PRIZE = range(6)
+END_GAME, END, START_OVER = config.END_GAME, config.END, config.START_OVER
+SLOT_ROUTES, PLAY_SLOT, SLOT_INFO, SLOT_OPEN, GET_SLOT_PRIZE =config.SLOT_ROUTES, config.PLAY_SLOT, config.SLOT_INFO, config.SLOT_OPEN, config.GET_SLOT_PRIZE
 
 def facts_to_str(user_data: Dict[str, str]) -> str:
     """Helper function for formatting the gathered user info."""
@@ -77,6 +84,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             InlineKeyboardButton("\U0001f3b2 업 앤 다운", callback_data=str(LOAD_UPDOWN)),
         ],
         [
+            InlineKeyboardButton("\U0001f3b0 슬롯머신", callback_data=str(LOAD_SLOT)),
             InlineKeyboardButton("종료", callback_data=str(END)),
         ]
     ]
@@ -361,7 +369,7 @@ async def calc_prize_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     vic_in_a_row = context.user_data["victory"]
     del context.user_data["victory"]
 
-    if point_dict[user]["victory"] < vic_in_a_row:
+    if point_dict[user]["victory"] <= vic_in_a_row:
         point_dict[user]["victory"] = vic_in_a_row
         point_dict[user]["vic_prize"] = game_prize
 
@@ -397,7 +405,7 @@ async def rock_papper_scissor_conv(update: Update, context: ContextTypes.DEFAULT
     keyboard = [
         [
             InlineKeyboardButton("100후", callback_data=str(PLAY_RPS_GAME)),
-            InlineKeyboardButton("500후", callback_data=str(PLAY_RPS_GAME_500)),
+            InlineKeyboardButton("5000후", callback_data=str(PLAY_RPS_GAME_500)),
             InlineKeyboardButton("1000후", callback_data=str(PLAY_RPS_GAME_1000)),
         ],
         [
@@ -420,7 +428,7 @@ async def rock_papper_scissor_play(update: Update, context: ContextTypes.DEFAULT
     if query_data == '0':
         game_fee = 100
     elif query_data == '1':
-        game_fee = 500
+        game_fee = 5000
     elif query_data == '2':
         game_fee = 1000
 
@@ -812,6 +820,15 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     query = update.callback_query
     await query.answer()
+    if context.user_data["slot_prize"]:
+        del context.user_data["slot_prize"]
+    if context.user_data["slot_game_cnt"]:
+        del context.user_data["slot_game_cnt"]
+    if context.user_data["slot_game"]:
+        del context.user_data["slot_game"]
+    if context.user_data["game_fee"]:
+        del context.user_data["game_fee"]
+
     await query.edit_message_text(text="힘들때 다시 찾아와줘 후..")
     return ConversationHandler.END
 
@@ -820,15 +837,18 @@ async def send_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     context.bot.send_message(chat_id=chat_id, text='퇴근하자~')
 
 async def daily_job(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    chat_id = -838335379
+    chat_id = update.effective_chat.id
     now = datetime.now(pytz.timezone('Asia/Seoul'))
     scheduled_time = datetime(now.year, now.month, now.day, 15, 20, 0, tzinfo=pytz.timezone('Asia/Seoul'))  # 매일 오후 5시
-    if scheduled_time < now:
-        scheduled_time += timedelta(days=1)  # 이미 지난 시간이면 다음날로 예약
-    JobQueue.run_daily(send_message, scheduled_time, days=(0, 1, 2, 3, 4), context=chat_id)
+    #chat_id = update.effective_chat.id
+    chat_id = -838335379
+    text = "후.. 후이팅!!"
+    text2 = "후.. 후이팅!!22222"
+    await context.bot.send_message(chat_id=chat_id, text=text)
+    if now.hour >= 9: #and now.minute == 20:
+        await context.bot.send_message(chat_id=chat_id, text=text2)
 
 async def bot_test(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    TOKEN = "5796035729:AAEiMHlyofIjoFyct-QEsDKtOh032bmvMvM"
     chat_id = update.message.chat_id
     context.bot.send_message(chat_id=chat_id, text='Hello World')
 
@@ -843,6 +863,11 @@ def main() -> None:
         TOKEN = f.read()
     persistence = PicklePersistence(filepath="conversationbot")
     application = Application.builder().token(TOKEN).persistence(persistence).build()
+    chat_id = -838335379
+    text = "후.. 후이팅!!"
+    def bot_ms():
+        return telegram.Bot.send_message(chat_id,text)
+    schedule.every(1).minutes.do(bot_ms)
 
     # if exists, load the last pickled dict of leaderboard
     if os.path.isfile( LNAME ):
@@ -854,7 +879,6 @@ def main() -> None:
             point_dict = pickle.load( f )
 
     set_last_day()
-
     conv_handler22 = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
@@ -863,6 +887,7 @@ def main() -> None:
                 CallbackQueryHandler(dice_cmd_conv, pattern="^" + str(LUCKY_DICE) + "$"),
                 CallbackQueryHandler(rock_papper_scissor_conv, pattern="^" + str(LOAD_RPS) + "$"),
                 CallbackQueryHandler(updown_conv, pattern="^" + str(LOAD_UPDOWN) + "$"),
+                CallbackQueryHandler(slot_conv, pattern="^" + str(LOAD_SLOT) + "$"),
                 CallbackQueryHandler(end, pattern="^" + str(END) + "$"),
             ],
             END_ROUTES: [
@@ -886,7 +911,16 @@ def main() -> None:
                 CallbackQueryHandler(get_UD_winner_conv, pattern="^" + str(SAME) + "$"),
                 CallbackQueryHandler(calc_prize_conv, pattern="^" + str(CALC_PRIZE) + "$"),
                 CallbackQueryHandler(end, pattern="^" + str(END_GAME) + "$"),
-            ]
+            ],
+            SLOT_ROUTES: [
+                CallbackQueryHandler(slot_open, pattern="^" + str(SLOT_OPEN) + "$"),
+                CallbackQueryHandler(slot_info, pattern="^" + str(SLOT_INFO) + "$"),
+                CallbackQueryHandler(slot_play, pattern="^" + str(PLAY_SLOT) + "$"),
+                CallbackQueryHandler(get_slot_prize, pattern="^" + str(GET_SLOT_PRIZE) + "$"),
+  
+                CallbackQueryHandler(end, pattern="^" + str(END_GAME) + "$"),
+            ],
+
 
         },
         fallbacks=[CommandHandler("end", end)],
@@ -906,17 +940,11 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.Regex(r'ㅊㅅ'), chul_seok))
     application.add_handler(MessageHandler(filters.Regex(r'출석'), chul_seok))
     application.add_handler(MessageHandler(filters.Regex(r'ㅌㄱ'), go_home))
+    application.add_handler(MessageHandler(filters.Regex(r'end'), end))
     #application.add_handler(MessageHandler(filters.Regex(r'test'), bot_test))
-    
-    #updater = Updater(TOKEN)
-    #updater.update_queue(daily_job)
-    #JobQueue.run_repeating(daily_job, interval=60, first=0)
-    #JobQueue.start(daily_job)
-    #updater.start_polling()
 
     # Run the bot until the user presses Ctrl-C
     application.run_polling()
-
 
 if __name__ == "__main__":
     main()
