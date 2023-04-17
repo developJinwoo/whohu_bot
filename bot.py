@@ -99,7 +99,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(
         "명령어 모음 \n /start  : 후후 봇 실행 \n /leaderboard  :  오늘의 한숨왕 \n /my_hu  : 나의 자산(후) 현황 \n" +
         "/hu_is_king  :  현재 자산(후) 랭킹 \n /lucky_hu  :  up&down 연승 랭킹 \n" +
-        "end or /end  :  후후 봇 종료 \n" +
+        "/donation  :  1000후 기부 \n end or /end  :  후후 봇 종료 \n" +
         "'ㅊㅅ' or '출석'  : 출석체크 +1000후 \n 후.. 한번에 +100후"
     )
 """
@@ -111,6 +111,9 @@ async def updown_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user = update.effective_user.first_name
     query = update.callback_query
     await query.answer()
+
+    with open( POINT_NAME, "rb" ) as f:
+        point_dict = pickle.load( f )
 
     if not point_dict[user]["victory"]:
         point_dict[user]["victory"] = 0
@@ -142,6 +145,8 @@ async def updown_play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     # call_query = update.callback_query # Debug
     # await query.edit_message_text(text=f'{call_query}') # Debug
     user = update.effective_user.first_name
+    with open( POINT_NAME, "rb" ) as f:
+        point_dict = pickle.load( f )
 
     if context.user_data["updown_game"] == 1:
         game_fee = context.user_data["game_fee"]
@@ -214,7 +219,9 @@ async def get_UD_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE)
     bot_dice = context.user_data["bot_dice"]
     game_fee = context.user_data["game_fee"]
     game_prize = context.user_data["prize"]
-    
+    with open( POINT_NAME, "rb" ) as f:
+        point_dict = pickle.load( f )
+        
     data_trans: dict[str, str] = {'0': '업!',
                              '1': '다운!',
                              '2': '동률!'}
@@ -230,6 +237,8 @@ async def get_UD_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE)
         del context.user_data["game_fee"]
         if context.user_data["updown_game"]:
             del context.user_data["prize"]
+        with open( POINT_NAME, 'wb' ) as pf:
+            pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
 
         reply_text = "주사위 눈금이 같습니다. 후.. \n"
         reply_text += f"이전 주사위 : \U0001f3b2 {bot_dice} : {new_bot_choice} \U0001f3b2 : 현재 주사위 \n"
@@ -276,6 +285,8 @@ async def get_UD_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE)
         del context.user_data["game_fee"]
         if context.user_data["updown_game"]:
             del context.user_data["prize"]
+        with open( POINT_NAME, 'wb' ) as pf:
+            pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
 
         reply_text = "주사위가 굴려졌습니다. 후.. \n"
         reply_text += f"이전 주사위 : \U0001f3b2 {bot_dice}  :  {new_bot_choice} \U0001f3b2 \U0001f199 : 현재 주사위 \n"
@@ -343,6 +354,8 @@ async def get_UD_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE)
         del context.user_data["game_fee"]
         if context.user_data["updown_game"]:
             del context.user_data["prize"]
+        with open( POINT_NAME, 'wb' ) as pf:
+            pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
 
         reply_text = "주사위가 굴려졌습니다. 후.. \n"
         reply_text += f"이전 주사위 : \U0001f199 \U0001f3b2 {bot_dice}  : {new_bot_choice} \U0001f3b2 : 현재 주사위 \n"
@@ -379,7 +392,9 @@ async def calc_prize_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     point_dict[user][last_day] += game_prize
     point_dict[user]["total"] += game_prize
     user_account = point_dict[user]["total"]
-    
+    with open( POINT_NAME, 'wb' ) as pf:
+        pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
+
     reply_text = "축하합니다!!! \U0001f389\U0001f389\U0001f389 \n"
     reply_text += f"상금 {game_prize}후를 획득하셨습니다. \n"
     reply_text += f"{user}님은 현재 {user_account}후를 보유하고 있습니다. \n"
@@ -391,9 +406,6 @@ async def calc_prize_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
-    ## save the dict
-    with open( POINT_NAME, 'wb' ) as pf:
-        pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
     return START_ROUTES
 
 """
@@ -435,6 +447,8 @@ async def rock_papper_scissor_play(update: Update, context: ContextTypes.DEFAULT
     elif query_data == '2':
         game_fee = 1000
 
+    with open( POINT_NAME, "rb" ) as f:
+        point_dict = pickle.load( f )
     context.user_data["game_fee"] = game_fee
     if point_dict[user]["total"] < game_fee:
         keyboard = [
@@ -490,6 +504,9 @@ async def get_RPS_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_emoji = get_emoji(user_choice)
     bot_emoji = get_emoji(bot_choice)
 
+    with open( POINT_NAME, "rb" ) as f:
+        point_dict = pickle.load( f )
+
     game_fee = context.user_data["game_fee"]
     del context.user_data["game_fee"]
     user_account = point_dict[user]["total"]
@@ -513,6 +530,8 @@ async def get_RPS_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE
         point_dict[user][last_day] += game_fee
         point_dict[user]["total"] += game_fee
         user_account += game_fee
+        with open( POINT_NAME, 'wb' ) as pf:
+            pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
         reply_text = f"축하합니다. {user}님이 이겼습니다. 후!! \n"
         reply_text += f"후후 봇 : {bot_emoji} / {user_emoji} : {user}님 \n"
         reply_text += f"승리 상금 {win_prize}후를 적립해 드립니다.\n"
@@ -532,6 +551,8 @@ async def get_RPS_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE
         point_dict[user][last_day] -= game_fee 
         point_dict[user]["total"] -= game_fee
         user_account -= game_fee
+        with open( POINT_NAME, 'wb' ) as pf:
+            pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
         reply_text = "후.. 졌습니다. 후.. \n"
         reply_text += f"후후 봇 : {bot_emoji} / {user_emoji} : {user}님 \n"
         reply_text += f"남아있는 잔액은 {user_account}후 입니다. \n"
@@ -598,7 +619,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def show_money_leads(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """ -------------------------------------------------------------------------------------------------------------
-    Show the hu money leaderboard 
+    Show the hu is king
     ------------------------------------------------------------------------------------------------------------- """
     txt         = f"\U0001F4C5 LEADERBOARD OF DAY { last_day }\n\n"
     money_lead_dict   = dict()
@@ -691,6 +712,58 @@ async def show_leads( update, context ):
     txt = show_day_lead( update, context )
     await update.message.reply_text(f"{txt}")
 
+async def donation_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """ -------------------------------------------------------------------------------------------------------------
+    포인트 기부
+    ------------------------------------------------------------------------------------------------------------- """
+    day_time = datetime.now()
+    day = str(day_time).split(' ')[0]
+    user = update.effective_user.first_name
+
+    with open( POINT_NAME, "rb" ) as f:
+        point_dict = pickle.load( f )
+
+    point_dict[user][day] -= 1000
+    point_dict[user]["total"] -= 1000
+    
+    whohu_bot = "whohu_bot"
+    if whohu_bot not in point_dict:
+        point_dict[whohu_bot] = defaultdict(int)
+        point_dict[whohu_bot]["donation"] = 0
+        point_dict[whohu_bot]["total"] = 0
+    point_dict[whohu_bot]["donation"] += 1000
+    point_dict[whohu_bot]["total"] += 1000
+    donation = point_dict[whohu_bot]["donation"]
+
+    ## save the dict
+    with open( POINT_NAME, 'wb' ) as pf:
+        pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
+    await update.message.reply_text(f"1000후 기부하셨습니다. \n 현재 기부 잔액 {donation}후")
+
+async def get_donation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """ -------------------------------------------------------------------------------------------------------------
+    포인트 구걸
+    ------------------------------------------------------------------------------------------------------------- """
+    day_time = datetime.now()
+    day = str(day_time).split(' ')[0]
+    user = update.effective_user.first_name
+    
+    with open( POINT_NAME, "rb" ) as f:
+        point_dict = pickle.load( f )
+    whohu_bot = "whohu_bot"
+    donation = point_dict[whohu_bot]["donation"]
+    if donation > 0:
+        point_dict[user][day] += donation
+        point_dict[user]["total"] += donation
+        point_dict[whohu_bot]["donation"] = 0
+        point_dict[whohu_bot]["total"] = 0
+        ## save the dict
+        with open( POINT_NAME, 'wb' ) as pf:
+            pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
+        await update.message.reply_text(f"구걸에 성공하여 {donation}후 획득하셨습니다!!")
+    else:
+        await update.message.reply_text("현재 기부된 후가 없습니다. \n 당신의 안쓰러운 처지를 어필해 보세요.")
+
 async def my_point_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """ -------------------------------------------------------------------------------------------------------------
     현재 내 후 포인트 현황
@@ -735,7 +808,7 @@ async def chul_seok(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user.first_name
     day_time = datetime.now()
     day = str(day_time).split(' ')[0]
-    #day ="2023-04-12"
+    
     check = "출석"
     if user not in point_dict:
         point_dict[user] = defaultdict(int)
@@ -862,11 +935,6 @@ def main() -> None:
         TOKEN = f.read()
     persistence = PicklePersistence(filepath="conversationbot")
     application = Application.builder().token(TOKEN).persistence(persistence).build()
-    chat_id = -838335379
-    text = "후.. 후이팅!!"
-    def bot_ms():
-        return telegram.Bot.send_message(chat_id,text)
-    schedule.every(1).minutes.do(bot_ms)
 
     # if exists, load the last pickled dict of leaderboard
     if os.path.isfile( LNAME ):
@@ -931,6 +999,7 @@ def main() -> None:
     application.add_handler(CommandHandler("hu_is_king", show_money_leads))
     application.add_handler(CommandHandler("lucky_hu", show_victory_leads))
     application.add_handler(CommandHandler("my_hu", my_point_cmd))
+    application.add_handler(CommandHandler("donation", donation_cmd))
     
 
     # on non command i.e message - echo the message on Telegram
@@ -940,6 +1009,7 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.Regex(r'출석'), chul_seok))
     application.add_handler(MessageHandler(filters.Regex(r'ㅌㄱ'), go_home))
     application.add_handler(MessageHandler(filters.Regex(r'end'), end))
+    application.add_handler(MessageHandler(filters.Regex(r'구걸'), get_donation))
     #application.add_handler(MessageHandler(filters.Regex(r'test'), bot_test))
 
     # Run the bot until the user presses Ctrl-C

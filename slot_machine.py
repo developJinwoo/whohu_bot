@@ -84,7 +84,17 @@ def roll_slot():
         sub_list_1.append(random.choice(casino_list))
         result_list.append(random.choice(casino_list))
         sub_list_2.append(random.choice(casino_list))
+
     return sub_list_1, result_list, sub_list_2
+
+def exist_bomb(result_list):
+    if result_list[0] == result_list[1] and result_list[0] == result_list[2] and result_list[0] == '\U0001f4a3':
+        return 'all_bomb'
+    elif '\U0001f4a3' in result_list:
+        return 'bomb'
+    else:
+        return 'no_bomb'
+    
 
 async def slot_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -114,10 +124,13 @@ async def slot_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             context.user_data["slot_game_cnt"] += 1
             slot_cnt = context.user_data["slot_game_cnt"]
             sub_1, result, sub_2 = roll_slot()
+            bomb = exist_bomb(result)
             with open( POINT_NAME, 'wb' ) as pf:
                 pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
-            if result[0] == result[1] and result[0] == result[2]:
+
+            if result[0] == result[1] and result[0] == result[2] and bomb == 'no_bomb':
                 prize = slot_money(result[0])
+                context.user_data["slot_prize"] = prize
                 keyboard = [
                     [
                         InlineKeyboardButton("상금 수령하기", callback_data=str(GET_SLOT_PRIZE)),
@@ -134,8 +147,57 @@ async def slot_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 reply_text += f"{user}님 획득 당첨후 : {prize}후 \n"
                 await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
                 return SLOT_ROUTES
-            else:
+            elif bomb == 'all_bomb':
+                prize = point_dict[user]["total"]
+                point_dict[user][day] -= prize
+                point_dict[user]["total"] -= prize
+                with open( POINT_NAME, 'wb' ) as pf:
+                    pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
+                keyboard = [
+                    [
+                        InlineKeyboardButton("자살 하기", callback_data=str(END_GAME)),
+                        InlineKeyboardButton("인생 포기", callback_data=str(END_GAME)),
+                    ],
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                reply_text = f"후후 슬롯 {slot_cnt}회차째 자추!! \U0001f4a3 \U0001f4a3 \U0001f4a3 \n"
+                reply_text += "--------------------------------------------------------------- \n"
+                reply_text += f"        [{sub_1[0]}],[{sub_1[1]}],[{sub_1[2]}]    \n"
+                reply_text += f">>> [{result[0]}],[{result[1]}],[{result[2]}] <<< \n"
+                reply_text += f"        [{sub_2[0]}],[{sub_2[1]}],[{sub_2[2]}]    \n"
+                reply_text += "--------------------------------------------------------------- \n"
+                reply_text += f"{user}님 벼락거지 되셨습니다. 앞으로 성실하게 일하세요. 후.. \n"
+                await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
+                return SLOT_ROUTES
+            
+            elif bomb == 'bomb':
+                prize = point_dict[user]["total"]
+                prize = round(int(prize // 2), -2)
+                point_dict[user][day] -= prize
+                point_dict[user]["total"] -= prize
+                user_account = point_dict[user]["total"]
+                with open( POINT_NAME, 'wb' ) as pf:
+                    pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
+                keyboard = [
+                    [
+                        InlineKeyboardButton("x 같네", callback_data=str(END_GAME)),
+                        InlineKeyboardButton("폭탄 ㅆㄹ!", callback_data=str(END_GAME)),
+                    ],
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                reply_text = f"후후 슬롯 {slot_cnt}회차째 자추!! \U0001f4a3 \U0001f4a3 \U0001f4a3 \n"
+                reply_text += "--------------------------------------------------------------- \n"
+                reply_text += f"        [{sub_1[0]}],[{sub_1[1]}],[{sub_1[2]}]    \n"
+                reply_text += f">>> [{result[0]}],[{result[1]}],[{result[2]}] <<< \n"
+                reply_text += f"        [{sub_2[0]}],[{sub_2[1]}],[{sub_2[2]}]    \n"
+                reply_text += "--------------------------------------------------------------- \n"
+                reply_text += f"{user}당신은 후를 소중히 여기지 않았습니다. \n"
+                reply_text += f"당신의 후.. 타노스 시켜드렸습니다. \n"
+                reply_text += f"잔액은 {user_account}후 입니다. 후.. \n"
+                await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
+                return SLOT_ROUTES
 
+            else:
                 keyboard = [
                     [
                         InlineKeyboardButton("Roll(-500후)", callback_data=str(PLAY_SLOT)),
@@ -154,7 +216,6 @@ async def slot_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
                 return SLOT_ROUTES
 
-            
         else:
             context.user_data["slot_game"] = 1
             sub_1, result, sub_2 = roll_slot()
@@ -191,10 +252,11 @@ async def slot_play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     slot_cnt = context.user_data["slot_game_cnt"]
 
     sub_1, result, sub_2 = roll_slot()
+    bomb = exist_bomb(result)
     with open( POINT_NAME, 'wb' ) as pf:
         pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
 
-    if result[0] == result[1] and result[0] == result[2]:
+    if result[0] == result[1] and result[0] == result[2] and bomb == 'no_bomb':
         prize = slot_money(result[0])
         context.user_data["slot_prize"] = prize
         keyboard = [
@@ -213,8 +275,56 @@ async def slot_play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         reply_text += f"{user}님 획득 당첨후 : {prize}후 \n"
         await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
         return SLOT_ROUTES
+    elif bomb == 'all_bomb':
+        prize = point_dict[user]["total"]
+        point_dict[user][day] -= prize
+        point_dict[user]["total"] -= prize
+        with open( POINT_NAME, 'wb' ) as pf:
+            pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
+        keyboard = [
+            [
+                InlineKeyboardButton("자살 하기", callback_data=str(END_GAME)),
+                InlineKeyboardButton("인생 포기", callback_data=str(END_GAME)),
+            ],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        reply_text = f"후후 슬롯 {slot_cnt}회차째 자추!! \U0001f4a3 \U0001f4a3 \U0001f4a3 \n"
+        reply_text += "--------------------------------------------------------------- \n"
+        reply_text += f"        [{sub_1[0]}],[{sub_1[1]}],[{sub_1[2]}]    \n"
+        reply_text += f">>> [{result[0]}],[{result[1]}],[{result[2]}] <<< \n"
+        reply_text += f"        [{sub_2[0]}],[{sub_2[1]}],[{sub_2[2]}]    \n"
+        reply_text += "--------------------------------------------------------------- \n"
+        reply_text += f"{user}님 벼락거지 되셨습니다. 앞으로 성실하게 일하세요. 후.. \n"
+        await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
+        return SLOT_ROUTES
+    
+    elif bomb == 'bomb':
+        prize = point_dict[user]["total"]
+        prize = round(int(prize // 2), -2)
+        point_dict[user][day] -= prize
+        point_dict[user]["total"] -= prize
+        user_account = point_dict[user]["total"]
+        with open( POINT_NAME, 'wb' ) as pf:
+            pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
+        keyboard = [
+            [
+                InlineKeyboardButton("x 같네", callback_data=str(END_GAME)),
+                InlineKeyboardButton("폭탄 ㅆㄹ!", callback_data=str(END_GAME)),
+            ],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        reply_text = f"후후 슬롯 {slot_cnt}회차째 자추!! \U0001f4a3 \U0001f4a3 \U0001f4a3 \n"
+        reply_text += "--------------------------------------------------------------- \n"
+        reply_text += f"        [{sub_1[0]}],[{sub_1[1]}],[{sub_1[2]}]    \n"
+        reply_text += f">>> [{result[0]}],[{result[1]}],[{result[2]}] <<< \n"
+        reply_text += f"        [{sub_2[0]}],[{sub_2[1]}],[{sub_2[2]}]    \n"
+        reply_text += "--------------------------------------------------------------- \n"
+        reply_text += f"{user}당신은 후를 소중히 여기지 않았습니다. \n"
+        reply_text += f"당신의 후.. 타노스 시켜드렸습니다. \n"
+        reply_text += f"잔액은 {user_account}후 입니다. 후.. \n"
+        await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
+        return SLOT_ROUTES
     else:
-
         keyboard = [
             [
                 InlineKeyboardButton("Roll(-500후)", callback_data=str(SLOT_OPEN)),
