@@ -74,6 +74,8 @@ def set_last_day():
         last_day = str(day_time).split(' ')[0]
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.message.from_user
+    logger.info("User %s started the conversation.", user.first_name)
     keyboard = [
         [
             InlineKeyboardButton("\U0001f37d\uFE0F 점메추", callback_data=str(MENU_CHU)),
@@ -97,6 +99,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(
         "명령어 모음 \n /start  : 후후 봇 실행 \n /leaderboard  :  오늘의 한숨왕 \n /my_hu  : 나의 자산(후) 현황 \n" +
         "/hu_is_king  :  현재 자산(후) 랭킹 \n /lucky_hu  :  up&down 연승 랭킹 \n" +
+        "end or /end  :  후후 봇 종료 \n" +
         "'ㅊㅅ' or '출석'  : 출석체크 +1000후 \n 후.. 한번에 +100후"
     )
 """
@@ -599,7 +602,8 @@ async def show_money_leads(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     ------------------------------------------------------------------------------------------------------------- """
     txt         = f"\U0001F4C5 LEADERBOARD OF DAY { last_day }\n\n"
     money_lead_dict   = dict()
-
+    with open( POINT_NAME, "rb" ) as f:
+        point_dict = pickle.load( f )
     for user in point_dict:
         if "total" in point_dict[user]:
             money_lead_dict[user] = point_dict[user]["total"]
@@ -694,6 +698,9 @@ async def my_point_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     day_time = datetime.now()
     day = str(day_time).split(' ')[0]
     user = update.effective_user.first_name
+    
+    with open( POINT_NAME, "rb" ) as f:
+        point_dict = pickle.load( f )
     total = point_dict[user]["total"]
 
     await update.message.reply_text(f"{user}님의 자산현황 \n 오늘 {point_dict[user][day]}후 획득! \n 총 자산 {total}후")
@@ -820,14 +827,6 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     query = update.callback_query
     await query.answer()
-    if context.user_data["slot_prize"]:
-        del context.user_data["slot_prize"]
-    if context.user_data["slot_game_cnt"]:
-        del context.user_data["slot_game_cnt"]
-    if context.user_data["slot_game"]:
-        del context.user_data["slot_game"]
-    if context.user_data["game_fee"]:
-        del context.user_data["game_fee"]
 
     await query.edit_message_text(text="힘들때 다시 찾아와줘 후..")
     return ConversationHandler.END

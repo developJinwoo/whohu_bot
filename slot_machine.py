@@ -28,6 +28,7 @@ END_ROUTES = config.END_ROUTES
 END_GAME, END, START_OVER = config.END_GAME, config.END, config.START_OVER
 SLOT_ROUTES, PLAY_SLOT, SLOT_INFO, SLOT_OPEN, GET_SLOT_PRIZE =config.SLOT_ROUTES, config.PLAY_SLOT, config.SLOT_INFO, config.SLOT_OPEN, config.GET_SLOT_PRIZE
 
+global day
 day_time = datetime.now()
 day = str(day_time).split(' ')[0]
 
@@ -90,7 +91,7 @@ async def slot_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await query.answer()
     query_data = update.callback_query.data
 
-    game_fee = 200
+    game_fee = 500
     context.user_data["game_fee"] = game_fee
     user = update.effective_user.first_name
     
@@ -113,6 +114,8 @@ async def slot_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             context.user_data["slot_game_cnt"] += 1
             slot_cnt = context.user_data["slot_game_cnt"]
             sub_1, result, sub_2 = roll_slot()
+            with open( POINT_NAME, 'wb' ) as pf:
+                pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
             if result[0] == result[1] and result[0] == result[2]:
                 prize = slot_money(result[0])
                 keyboard = [
@@ -129,6 +132,8 @@ async def slot_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 reply_text += f"        [{sub_2[0]}],[{sub_2[1]}],[{sub_2[2]}]    \n"
                 reply_text += "--------------------------------------------------------------- \n"
                 reply_text += f"{user}님 획득 당첨후 : {prize}후 \n"
+                await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
+                return SLOT_ROUTES
             else:
 
                 keyboard = [
@@ -148,6 +153,7 @@ async def slot_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 reply_text += f"{user}님 현재 잔액 : {user_account} \n"
                 await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
                 return SLOT_ROUTES
+
             
         else:
             context.user_data["slot_game"] = 1
@@ -185,6 +191,9 @@ async def slot_play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     slot_cnt = context.user_data["slot_game_cnt"]
 
     sub_1, result, sub_2 = roll_slot()
+    with open( POINT_NAME, 'wb' ) as pf:
+        pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
+
     if result[0] == result[1] and result[0] == result[2]:
         prize = slot_money(result[0])
         context.user_data["slot_prize"] = prize
@@ -202,6 +211,8 @@ async def slot_play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         reply_text += f"        [{sub_2[0]}],[{sub_2[1]}],[{sub_2[2]}]    \n"
         reply_text += "--------------------------------------------------------------- \n"
         reply_text += f"{user}님 획득 당첨후 : {prize}후 \n"
+        await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
+        return SLOT_ROUTES
     else:
 
         keyboard = [
@@ -232,10 +243,12 @@ async def get_slot_prize(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     point_dict[user]["total"] += prize
     user_account = point_dict[user]["total"]
 
-    del context.user_data["slot_prize"]
+    #del context.user_data["slot_prize"]
     del context.user_data["slot_game_cnt"]
-    del context.user_data["slot_game"]
+    #del context.user_data["slot_game"]
     del context.user_data["game_fee"]
+    with open( POINT_NAME, 'wb' ) as pf:
+        pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
 
     keyboard = [
         [
@@ -248,7 +261,6 @@ async def get_slot_prize(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     reply_text = f"당첨을 축하드립니다!! \U0001f389 \U0001f389 \U0001f389 \n"
     reply_text += f"{user}님 현재 잔액 : {user_account} \n"
     await query.edit_message_text(text=reply_text, reply_markup=reply_markup)
-
     return SLOT_ROUTES
 
 def slot_money(emoji):
