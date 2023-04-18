@@ -221,7 +221,7 @@ async def get_UD_winner_conv(update: Update, context: ContextTypes.DEFAULT_TYPE)
     game_prize = context.user_data["prize"]
     with open( POINT_NAME, "rb" ) as f:
         point_dict = pickle.load( f )
-        
+
     data_trans: dict[str, str] = {'0': '업!',
                              '1': '다운!',
                              '2': '동률!'}
@@ -922,7 +922,7 @@ async def daily_job(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def bot_test(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     chat_id = update.message.chat_id
-    context.bot.send_message(chat_id=chat_id, text='Hello World')
+    context.bot.send_message(chat_id=chat_id, text=f'chat id : {chat_id}')
 
     await update.message.reply_text(chat_id)
 
@@ -1010,7 +1010,7 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.Regex(r'ㅌㄱ'), go_home))
     application.add_handler(MessageHandler(filters.Regex(r'end'), end))
     application.add_handler(MessageHandler(filters.Regex(r'구걸'), get_donation))
-    #application.add_handler(MessageHandler(filters.Regex(r'test'), bot_test))
+    application.add_handler(MessageHandler(filters.Regex(r'test'), bot_test))
 
     # Run the bot until the user presses Ctrl-C
     application.run_polling()
