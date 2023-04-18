@@ -36,6 +36,7 @@ import config
 from slot_machine import slot_conv, slot_play, slot_info, slot_open, get_slot_prize
 from updown_game import updown_conv, updown_play, get_UD_winner_conv, calc_prize_conv
 from RPS_game import rock_papper_scissor_conv, rock_papper_scissor_play, get_RPS_winner_conv
+from one2one_match import join_cmd, regi_cmd, leave_cmd
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -451,10 +452,11 @@ async def daily_job(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         await context.bot.send_message(chat_id=chat_id, text=text2)
 
 async def bot_test(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user = update.effective_user.first_name
     chat_id = update.message.chat_id
     context.bot.send_message(chat_id=chat_id, text=f'chat id : {chat_id}')
 
-    await update.message.reply_text(chat_id)
+    await update.message.reply_text( text= f'{user}님의 id는 {chat_id}입니다.')
 
 def main() -> None:
     """Start the bot."""
@@ -530,6 +532,10 @@ def main() -> None:
     application.add_handler(CommandHandler("lucky_hu", show_victory_leads))
     application.add_handler(CommandHandler("my_hu", my_point_cmd))
     application.add_handler(CommandHandler("donation", donation_cmd))
+
+    application.add_handler(CommandHandler("registration", regi_cmd))
+    application.add_handler(CommandHandler("join", join_cmd))
+    application.add_handler(CommandHandler("leave", leave_cmd))
     
 
     # on non command i.e message - echo the message on Telegram

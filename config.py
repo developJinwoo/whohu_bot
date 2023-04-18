@@ -2,6 +2,7 @@
 
 LNAME               = "leaderboard.pickle"
 POINT_NAME          = "point.pickle"
+MATCH_NAME          = "match.pickle"
 
 START_ROUTES, END_ROUTES = 1001, 1002
 RPS_ROUTES, UPDOWN_ROUTES, SLOT_ROUTES = 200, 100, 700
