@@ -22,6 +22,7 @@ import asyncio
 import aiofiles
 
 import config
+from utils import pickler, unpickler
 
 LNAME = config.LNAME
 POINT_NAME = config.POINT_NAME

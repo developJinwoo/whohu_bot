@@ -32,11 +32,12 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 import asyncio
 import aiofiles
 
+from utils import pickler, unpickler
 import config
 from slot_machine import slot_conv, slot_play, slot_info, slot_open, get_slot_prize
 from updown_game import updown_conv, updown_play, get_UD_winner_conv, calc_prize_conv
 from RPS_game import rock_papper_scissor_conv, rock_papper_scissor_play, get_RPS_winner_conv
-from one2one_match import join_cmd, regi_cmd, leave_cmd
+from one2one_match import join_cmd, regi_cmd, leave_cmd, play_cmd, match_cmd, match_info_cmd
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -81,6 +82,7 @@ def set_last_day():
         day_time = datetime.now()
         last_day = str(day_time).split(' ')[0]
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.message.from_user
     logger.info("User %s started the conversation.", user.first_name)
@@ -118,6 +120,8 @@ async def dice_cmd_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user = update.effective_user.first_name
     query = update.callback_query
     await query.answer()
+    point_dict = await unpickler(POINT_NAME)
+
     rand_num = random.randrange(1,4)
     keyboard = [
         [
@@ -133,12 +137,16 @@ async def dice_cmd_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         text = f'{user}님의 행운은 \U0001f631 최악입니다. -1000후'
         point_dict[user][last_day] -= 1000
         point_dict[user]["total"] -= 1000
+
+        await pickler(POINT_NAME, point_dict)
     elif rand_num == 2:
         text = f'{user}님의 행운은 \U0001f610 보통입니다.'
     elif rand_num == 3:
         text = f'{user}님의 행운은 \U0001f340 최상입니다. +1000후'
         point_dict[user][last_day] += 1000
         point_dict[user]["total"] += 1000
+
+        await pickler(POINT_NAME, point_dict)
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text=f'오늘의 운세 \n {text}', reply_markup=reply_markup)
     
@@ -154,8 +162,7 @@ async def show_money_leads(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     ------------------------------------------------------------------------------------------------------------- """
     txt         = f"\U0001F4C5 LEADERBOARD OF DAY { last_day }\n\n"
     money_lead_dict   = dict()
-    with open( POINT_NAME, "rb" ) as f:
-        point_dict = pickle.load( f )
+    point_dict = await unpickler(POINT_NAME)
     for user in point_dict:
         if "total" in point_dict[user]:
             money_lead_dict[user] = point_dict[user]["total"]
@@ -181,6 +188,7 @@ async def show_victory_leads(update: Update, context: ContextTypes.DEFAULT_TYPE)
     txt         = f"\U0001F4C5 LEADERBOARD OF DAY { last_day }\n\n"
     vic_lead_dict   = dict()
     vic_prize_lead_dict   = dict()
+    point_dict = await unpickler(POINT_NAME)
 
     for user in point_dict:
         if "victory" in point_dict[user]:
@@ -202,7 +210,7 @@ async def show_victory_leads(update: Update, context: ContextTypes.DEFAULT_TYPE)
         txt     += f"{ r }. { medal } @{ u } ( { s }연승! {vic_prize}후 획득! )\n"
     await update.message.reply_text((f"{txt}"))
 
-def show_day_lead( update, context ):
+def show_day_lead( update, context):
     """ -------------------------------------------------------------------------------------------------------------
     Show the leaderboard of the day
     ------------------------------------------------------------------------------------------------------------- """
@@ -240,7 +248,8 @@ async def show_leads( update, context ):
     Show the leaderboards
     ------------------------------------------------------------------------------------------------------------- """
     set_last_day()
-    txt = show_day_lead( update, context )
+    #score_dict = await unpickler(LNAME)
+    txt = show_day_lead( update, context)
     await update.message.reply_text(f"{txt}")
 
 async def donation_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -250,9 +259,7 @@ async def donation_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     day_time = datetime.now()
     day = str(day_time).split(' ')[0]
     user = update.effective_user.first_name
-
-    with open( POINT_NAME, "rb" ) as f:
-        point_dict = pickle.load( f )
+    point_dict = await unpickler(POINT_NAME)
 
     point_dict[user][day] -= 1000
     point_dict[user]["total"] -= 1000
@@ -266,9 +273,7 @@ async def donation_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     point_dict[whohu_bot]["total"] += 1000
     donation = point_dict[whohu_bot]["donation"]
 
-    ## save the dict
-    with open( POINT_NAME, 'wb' ) as pf:
-        pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
+    await pickler(POINT_NAME, point_dict)
     await update.message.reply_text(f"1000후 기부하셨습니다. \n 현재 기부 잔액 {donation}후")
 
 async def get_donation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -279,8 +284,8 @@ async def get_donation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     day = str(day_time).split(' ')[0]
     user = update.effective_user.first_name
     
-    with open( POINT_NAME, "rb" ) as f:
-        point_dict = pickle.load( f )
+    point_dict = await unpickler(POINT_NAME)
+
     whohu_bot = "whohu_bot"
     donation = point_dict[whohu_bot]["donation"]
     if donation > 0:
@@ -288,9 +293,8 @@ async def get_donation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         point_dict[user]["total"] += donation
         point_dict[whohu_bot]["donation"] = 0
         point_dict[whohu_bot]["total"] = 0
-        ## save the dict
-        with open( POINT_NAME, 'wb' ) as pf:
-            pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
+
+        await pickler(POINT_NAME, point_dict)
         await update.message.reply_text(f"구걸에 성공하여 {donation}후 획득하셨습니다!!")
     else:
         await update.message.reply_text("현재 기부된 후가 없습니다. \n 당신의 안쓰러운 처지를 어필해 보세요.")
@@ -303,8 +307,7 @@ async def my_point_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     day = str(day_time).split(' ')[0]
     user = update.effective_user.first_name
     
-    with open( POINT_NAME, "rb" ) as f:
-        point_dict = pickle.load( f )
+    point_dict = await unpickler(POINT_NAME)
     total = point_dict[user]["total"]
 
     await update.message.reply_text(f"{user}님의 자산현황 \n 오늘 {point_dict[user][day]}후 획득! \n 총 자산 {total}후")
@@ -339,7 +342,8 @@ async def chul_seok(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user.first_name
     day_time = datetime.now()
     day = str(day_time).split(' ')[0]
-    
+    point_dict = await unpickler(POINT_NAME)
+
     check = "출석"
     if user not in point_dict:
         point_dict[user] = defaultdict(int)
@@ -350,16 +354,16 @@ async def chul_seok(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         point_dict[user][check] = day
         point_dict[user][day] += 1000
         point_dict[user]["total"] += 1000
+
+        await pickler(POINT_NAME, point_dict)
         await update.message.reply_text(f"{user}님 {day} 출석!! \n 출석 보상 +1000후 ")
-    ## save the dict
-    with open( POINT_NAME, 'wb' ) as pf:
-        pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
 
 async def go_home(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """ -------------------------------------------------------------------------------------------------------------
     퇴근 체크
     ------------------------------------------------------------------------------------------------------------- """
     user = update.effective_user.first_name
+    point_dict = await unpickler(POINT_NAME)
     if user not in point_dict:
         point_dict[user] = defaultdict(int)
 
@@ -398,16 +402,18 @@ async def go_home(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             point_dict[user][check] = day
             point_dict[user][day] += 1000
             point_dict[user]["total"] += 1000
+
+            await pickler(POINT_NAME, point_dict)
             await update.message.reply_text(f"{user}님 {day} 퇴근!! \n 오늘 하루 고생하셨습니다. +1000후 ")
-    ## save the dict
-    with open( POINT_NAME, 'wb' ) as pf:
-        pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
 
 async def get_hu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     #u_id = user.id
     user = update.effective_user.first_name
     day_time = datetime.now()
     day = str(day_time).split(' ')[0]
+    score_dict = await unpickler(LNAME)
+    point_dict = await unpickler(POINT_NAME)
+
     if user not in score_dict:
         score_dict[ user ] = defaultdict(int)
     if user not in point_dict:
@@ -420,10 +426,8 @@ async def get_hu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     point_dict[user]["total"] += 100
 
     ## save the dict
-    with open( LNAME, 'wb' ) as f:
-        pickle.dump( score_dict, f, protocol=pickle.HIGHEST_PROTOCOL )
-    with open( POINT_NAME, 'wb' ) as pf:
-        pickle.dump( point_dict, pf, protocol=pickle.HIGHEST_PROTOCOL )
+    await pickler(LNAME, score_dict)
+    await pickler(POINT_NAME, point_dict)
 
 async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Returns `ConversationHandler.END`, which tells the
@@ -468,7 +472,7 @@ def main() -> None:
     persistence = PicklePersistence(filepath="conversationbot")
     application = Application.builder().token(TOKEN).persistence(persistence).build()
 
-    # if exists, load the last pickled dict of leaderboard
+    ### if exists, load the last pickled dict of leaderboard
     if os.path.isfile( LNAME ):
         with open( LNAME, "rb" ) as f:
             score_dict = pickle.load( f )
@@ -536,6 +540,9 @@ def main() -> None:
     application.add_handler(CommandHandler("registration", regi_cmd))
     application.add_handler(CommandHandler("join", join_cmd))
     application.add_handler(CommandHandler("leave", leave_cmd))
+    application.add_handler(CommandHandler("play", play_cmd))
+    application.add_handler(CommandHandler("match", match_cmd))
+    application.add_handler(CommandHandler("match_info", match_info_cmd))
     
 
     # on non command i.e message - echo the message on Telegram
@@ -546,7 +553,7 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.Regex(r'ㅌㄱ'), go_home))
     application.add_handler(MessageHandler(filters.Regex(r'end'), end))
     application.add_handler(MessageHandler(filters.Regex(r'구걸'), get_donation))
-    application.add_handler(MessageHandler(filters.Regex(r'test'), bot_test))
+    #application.add_handler(MessageHandler(filters.Regex(r'test'), bot_test))
 
     # Run the bot until the user presses Ctrl-C
     application.run_polling()
