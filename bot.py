@@ -58,7 +58,7 @@ MENU_CHU, LUCKY_DICE = config.MENU_CHU, config.LUCKY_DICE
 LOAD_RPS, LOAD_UPDOWN, LOAD_SLOT = config.LOAD_RPS, config.LOAD_UPDOWN, config.LOAD_SLOT
 UP, DOWN, SAME = config.UP, config.DOWN, config.SAME
 PLAY_UD_GAME, PLAY_UD_GAME_1000, CALC_PRIZE = config.PLAY_UD_GAME, config.PLAY_UD_GAME_1000, config.CALC_PRIZE
-END_GAME, END, START_OVER = config.END_GAME, config.END, config.START_OVER
+END_GAME, END, START_OVER, LOAN = config.END_GAME, config.END, config.START_OVER, config.LOAN
 PLAY_SLOT, SLOT_INFO, SLOT_OPEN, GET_SLOT_PRIZE = config.PLAY_SLOT, config.SLOT_INFO, config.SLOT_OPEN, config.GET_SLOT_PRIZE
 
 def facts_to_str(user_data: Dict[str, str]) -> str:
@@ -110,6 +110,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "명령어 모음 \n /start  : 후후 봇 실행 \n /leaderboard  :  오늘의 한숨왕 \n /my_hu  : 나의 자산(후) 현황 \n" +
         "/hu_is_king  :  현재 자산(후) 랭킹 \n /lucky_hu  :  up&down 연승 랭킹 \n" +
         "/donation  :  1000후 기부 \n end or /end  :  후후 봇 종료 \n" +
+        "/match_info : 1:1 대결 안내 \n" +
         "'ㅊㅅ' or '출석'  : 출석체크 +1000후 \n 후.. 한번에 +100후"
     )
 
@@ -259,22 +260,48 @@ async def donation_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     day_time = datetime.now()
     day = str(day_time).split(' ')[0]
     user = update.effective_user.first_name
+    chat_msg = update.message.text
+    chat_txt = chat_msg.replace('/donation', ' ')
+    chat_money = chat_txt.replace(' ', '')
     point_dict = await unpickler(POINT_NAME)
+    user_account = point_dict[user]["total"]
+    #donation = 0
 
-    point_dict[user][day] -= 1000
-    point_dict[user]["total"] -= 1000
-    
     whohu_bot = "whohu_bot"
     if whohu_bot not in point_dict:
         point_dict[whohu_bot] = defaultdict(int)
         point_dict[whohu_bot]["donation"] = 0
         point_dict[whohu_bot]["total"] = 0
-    point_dict[whohu_bot]["donation"] += 1000
-    point_dict[whohu_bot]["total"] += 1000
-    donation = point_dict[whohu_bot]["donation"]
+
+    donation_acc = point_dict[whohu_bot]["donation"]
+    if not chat_money:
+        donation = 1000
+        point_dict[user][day] -= donation
+        point_dict[user]["total"] -= donation
+        point_dict[whohu_bot]["donation"] += donation
+        point_dict[whohu_bot]["total"] += donation
+        donation_acc = point_dict[whohu_bot]["donation"]
+    else:
+        chat_money = int(chat_money)
+        if chat_money <= 0 and chat_money <= user_account:
+            donation = 1000
+            point_dict[user][day] -= donation
+            point_dict[user]["total"] -= donation
+            point_dict[whohu_bot]["donation"] += donation
+            point_dict[whohu_bot]["total"] += donation
+            donation_acc = point_dict[whohu_bot]["donation"]
+        elif chat_money > 0 and chat_money <= user_account:
+            donation = chat_money
+            point_dict[user][day] -= donation
+            point_dict[user]["total"] -= donation
+            point_dict[whohu_bot]["donation"] += donation
+            point_dict[whohu_bot]["total"] += donation
+            donation_acc = point_dict[whohu_bot]["donation"]
+        # else:
+        #     donation = chat_money
 
     await pickler(POINT_NAME, point_dict)
-    await update.message.reply_text(f"1000후 기부하셨습니다. \n 현재 기부 잔액 {donation}후")
+    await update.message.reply_text(f"{donation}후 기부하셨습니다. \n 현재 기부 잔액 {donation_acc}후")
 
 async def get_donation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """ -------------------------------------------------------------------------------------------------------------
@@ -292,7 +319,7 @@ async def get_donation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         point_dict[user][day] += donation
         point_dict[user]["total"] += donation
         point_dict[whohu_bot]["donation"] = 0
-        point_dict[whohu_bot]["total"] = 0
+        point_dict[whohu_bot]["total"] -= donation
 
         await pickler(POINT_NAME, point_dict)
         await update.message.reply_text(f"구걸에 성공하여 {donation}후 획득하셨습니다!!")
@@ -322,9 +349,7 @@ async def jum_me_chu_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     keyboard = [
         [
             InlineKeyboardButton("한식", callback_data=str(END)),
-            InlineKeyboardButton("중식", callback_data=str(END)),
-            InlineKeyboardButton("일식", callback_data=str(END)),
-            InlineKeyboardButton("랜덤", callback_data=str(END)),
+            InlineKeyboardButton("생계비 지원", callback_data=str(LOAN)),
         ],
         [
             InlineKeyboardButton("-= 개발중 =-", callback_data=str(START_OVER)),
@@ -332,8 +357,31 @@ async def jum_me_chu_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text=f"먹지마!!", reply_markup=reply_markup)
-    
     return END_ROUTES
+
+async def loan_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user.first_name
+    query = update.callback_query
+    await query.answer()
+    day_time = datetime.now()
+    day = str(day_time).split(' ')[0]
+    point_dict = await unpickler(POINT_NAME)
+    user_account = point_dict[user]["total"]
+
+    if point_dict[user]["total"] <= 0:
+        point_dict[user][day] += 10000
+        point_dict[user]["total"] += 10000
+        user_account = point_dict[user]["total"]
+        await pickler(POINT_NAME, point_dict)
+
+        await query.edit_message_text(f"{user}님 생계비 지원 완료 \n 잔액 : {user_account}후 ")
+        return ConversationHandler.END
+    else:
+        reply_text = f"{user}님 보다 어려운 사람이 많습니다. \n"
+        reply_text += "기부를 해보는건 어떠실까요? /donation \n"
+        reply_text += f"현재 잔액 : {user_account}후 "
+        await query.edit_message_text(text=reply_text)
+        return ConversationHandler.END
 
 async def chul_seok(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """ -------------------------------------------------------------------------------------------------------------
@@ -458,9 +506,12 @@ async def daily_job(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def bot_test(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.effective_user.first_name
     chat_id = update.message.chat_id
+    chat_msg = update.message.text
+    chat_txt = chat_msg.replace('test', ' ')
+    chat_txt = chat_txt.replace(' ', '')
     context.bot.send_message(chat_id=chat_id, text=f'chat id : {chat_id}')
 
-    await update.message.reply_text( text= f'{user}님의 id는 {chat_id}입니다.')
+    await update.message.reply_text( text= f'{user}님의 id는 {chat_id}입니다. {chat_txt}')
 
 def main() -> None:
     """Start the bot."""
@@ -496,6 +547,7 @@ def main() -> None:
             END_ROUTES: [
                 CallbackQueryHandler(start, pattern="^" + str(START_OVER) + "$"),
                 CallbackQueryHandler(end, pattern="^" + str(END) + "$"),
+                CallbackQueryHandler(loan_conv, pattern="^" + str(LOAN) + "$"),
             ],
             RPS_ROUTES: [
                 CallbackQueryHandler(rock_papper_scissor_play, pattern="^" + str(PLAY_RPS_GAME) + "$"),
@@ -553,7 +605,7 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.Regex(r'ㅌㄱ'), go_home))
     application.add_handler(MessageHandler(filters.Regex(r'end'), end))
     application.add_handler(MessageHandler(filters.Regex(r'구걸'), get_donation))
-    #application.add_handler(MessageHandler(filters.Regex(r'test'), bot_test))
+    application.add_handler(MessageHandler(filters.Regex(r'test'), bot_test))
 
     # Run the bot until the user presses Ctrl-C
     application.run_polling()
